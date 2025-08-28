@@ -5,10 +5,10 @@ import { setMiniFromItems, addLineFromItems } from './calculator.js';
 const qs  = (s, r=document) => r.querySelector(s);
 const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
-// Default presets (weight grams)
+// Defaults
 const DEFAULT_WEIGHT = [50,100,500,1000];
 
-// Modal form injection (unchanged)
+// Modal form
 function ensureItemForm(){
   const body = qs('#itemModalBody');
   if (!body || body.dataset.wired==='1') return;
@@ -34,8 +34,7 @@ function ensureItemForm(){
 function openModal(id){ qs('#'+id)?.classList.add('open'); }
 function closeModal(id){ qs('#'+id)?.classList.remove('open'); }
 
-// Render helpers
-function gramsToPrice(sp, g){ return (Number(sp)||0) * (g/1000); }  // price for g at selling ₹/kg
+function gramsToPrice(sp, g){ return (Number(sp)||0) * (g/1000); }
 function rupeeRound(x){ const n=Number(x)||0; const r=Math.floor(n); const p=Math.round((n-r)*100); return p>=90? r+1 : r; }
 
 function renderCards(mountEl, state, ui){
@@ -48,14 +47,18 @@ function renderCards(mountEl, state, ui){
   mountEl.innerHTML = '';
   if (!items.length){
     const empty = document.createElement('div');
-    empty.className='small-muted'; empty.style.cssText='text-align:center;padding:10px 0'; empty.textContent='No items yet. Tap + to add.'; mountEl.appendChild(empty); return;
+    empty.className='small-muted';
+    empty.style.cssText='text-align:center;padding:10px 0';
+    empty.textContent='No items yet. Tap + to add.';
+    mountEl.appendChild(empty);
+    return;
   }
 
   const frag = document.createDocumentFragment();
+
   items.forEach((it)=>{
     const card=document.createElement('div'); card.className='card';
 
-    // Header row
     const head=document.createElement('div'); head.className='card-row';
     head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:6px';
     head.innerHTML = `
@@ -68,7 +71,6 @@ function renderCards(mountEl, state, ui){
       </div>`;
     card.appendChild(head);
 
-    // Meta row
     const meta=document.createElement('div'); meta.className='meta';
     meta.style.cssText='display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:2px';
     meta.innerHTML = `
@@ -76,32 +78,28 @@ function renderCards(mountEl, state, ui){
       <div class="buy"  style="font-size:.5rem;opacity:.75">₹${(+it.bprice||0).toFixed(2)}/kg</div>`;
     card.appendChild(meta);
 
-    // Dropdown (if open)
     if(ui.openId===it.id){
       const dd=document.createElement('div'); dd.className='dropdown';
       dd.style.cssText='margin-top:8px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);padding:8px';
 
-      // Chips row
       const chips=document.createElement('div'); chips.style.cssText='display:flex;gap:6px;overflow:auto;padding:2px 0';
       const sp=+it.sprice||0;
       (it.presets?.weight?.length? it.presets.weight : DEFAULT_WEIGHT).forEach(g=>{
         const grams = typeof g==='number'? g : (+g||0);
         const amount = rupeeRound(gramsToPrice(sp, grams));
         const b=document.createElement('button'); b.className='small-btn'; b.textContent=`${grams}g\n₹${amount}`;
-        b.style.whiteSpace='pre'; b.addEventListener('click', ()=>{
-          setMiniFromItems(amount);  // reflect in calculator mini [8]
-        });
+        b.style.whiteSpace='pre';
+        b.addEventListener('click', ()=>{ setMiniFromItems(amount); });
         chips.appendChild(b);
       });
       dd.appendChild(chips);
 
-      // Converter row (₹ only for now)
       const conv=document.createElement('div'); conv.style.cssText='display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap';
       conv.innerHTML = `
         <label style="display:flex;align-items:center;gap:6px">
           <span>₹</span>
           <input type="number" inputmode="decimal" min="0" step="0.01" data-price="${it.id}"
-            style="width:120px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;padding:6px 8px" />
+                 style="width:120px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;padding:6px 8px" />
         </label>
         <button class="small-btn" data-add-now="${it.id}">＋</button>
         <button class="small-btn" data-close="${it.id}">✕</button>
@@ -110,17 +108,17 @@ function renderCards(mountEl, state, ui){
 
       dd.addEventListener('input', (e)=>{
         const pid=e.target.getAttribute('data-price');
-        if(pid){ const p=parseFloat(e.target.value)||0; setMiniFromItems(p); }  // set calc mini as user types [8]
+        if(pid){ const p=parseFloat(e.target.value)||0; setMiniFromItems(p); }
       });
       dd.addEventListener('click', (e)=>{
         const addNow=e.target.getAttribute('data-add-now');
         const close=e.target.getAttribute('data-close');
         if(addNow){
           const priceInput=dd.querySelector('input[data-price]');
-          const p = parseFloat(priceInput?.value)||0;
-          const amt = rupeeRound(p);
+          const p=parseFloat(priceInput?.value)||0;
+          const amt=rupeeRound(p);
           if(amt>0){
-            addLineFromItems({ itemName:`${it.name1} / ${it.name2} / ${it.name3}`, grams:null, price:amt });  // direct add [8]
+            addLineFromItems({ itemName:`${it.name1} / ${it.name2} / ${it.name3}`, grams:null, price:amt });
             priceInput.value='';
             setMiniFromItems(0);
           }
@@ -140,30 +138,27 @@ function renderCards(mountEl, state, ui){
 export async function initItems(mountEl, state){
   if(!mountEl) return;
 
-  // Load items from DB
+  // Load items
   try { const existing = await dbGet(KEYS.items); if(Array.isArray(existing)) state.items = existing; } catch {}
-
   ensureItemForm();
 
-  // Elements
   const fab=qs('#fab'); const form=qs('#itemForm'); const title=qs('#itemModalTitle');
   const name1=qs('#name1'); const name2=qs('#name2'); const name3=qs('#name3');
   const sprice=qs('#sprice'); const bprice=qs('#bprice'); const delBtn=qs('#itemDeleteBtn');
 
-  // UI state for dropdown
   const ui = { openId:null };
-
   let editingId=null;
   const genId = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
 
   function render(){ renderCards(mountEl,state,ui); }
 
-  function startAdd(){ editingId=null; title.textContent='Add item'; delBtn.style.display='none';
+  function startAdd(){
+    editingId=null; title.textContent='Add item'; delBtn.style.display='none';
     name1.value=''; name2.value=''; name3.value=''; sprice.value=''; bprice.value='';
     openModal('itemModal'); setTimeout(()=>name1?.focus(),50);
   }
   function startEdit(id){
-    const it = state.items.find(x=>x.id===id); if(!it) return;
+    const it=state.items.find(x=>x.id===id); if(!it) return;
     editingId=id; title.textContent='Edit item'; delBtn.style.display='inline-block';
     name1.value=it.name1||''; name2.value=it.name2||''; name3.value=it.name3||'';
     sprice.value=it.sprice||''; bprice.value=it.bprice||'';
@@ -191,7 +186,6 @@ export async function initItems(mountEl, state){
     }
   }
 
-  // Events
   fab?.addEventListener('click', startAdd);
   form?.addEventListener('submit', onSubmit);
   delBtn?.addEventListener('click', onDelete);
