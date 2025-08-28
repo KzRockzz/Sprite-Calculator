@@ -1,7 +1,8 @@
-// app.js (ES module) — Step 2 wiring with storage
+// app.js (ES module) — Step 2 + Calculator base mounted
 import { get as dbGet, set as dbSet, KEYS } from './modules/storage.js';
+import { initCalculator } from './modules/calculator.js';
 
-const qs = (s, r=document) => r.querySelector(s);
+const qs  = (s, r=document) => r.querySelector(s);
 const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
 // ---------- State skeleton (will expand next steps)
@@ -20,9 +21,11 @@ const themeBtn = qs('#themeBtn');
 function applyTheme(t) {
   document.body.classList.toggle('light', t==='light');
   document.body.classList.toggle('dark', t!=='light');
-  themeBtn.querySelector('.only').textContent = t==='light' ? '☀️' : '🌙';
+  if (themeBtn?.querySelector('.only')) {
+    themeBtn.querySelector('.only').textContent = t==='light' ? '☀️' : '🌙';
+  }
 }
-themeBtn.addEventListener('click', async () => {
+themeBtn?.addEventListener('click', async () => {
   state.theme = (state.theme==='dark' ? 'light' : 'dark');
   applyTheme(state.theme);
   try { await dbSet(KEYS.theme, state.theme); } catch {}
@@ -63,7 +66,7 @@ document.addEventListener('click', (e)=>{
   }
 })();
 
-// ---------- Load persisted state, then render shell
+// ---------- Load persisted state, then render shell + calculator
 async function loadAll() {
   try {
     const [items, rSearch, rItems, calc, bills, settings, theme] = await Promise.all([
@@ -82,9 +85,8 @@ async function loadAll() {
   applyTheme(state.theme);
   applySettings();
 
-  // Placeholder mounts (calculator and list modules arrive next)
-  qs('#calcMount').innerHTML = '';
-  qs('#listMount').innerHTML = '';
+  // Mount calculator as the base UI
+  initCalculator(document.getElementById('calcMount'), state);
 }
 
 // ---------- Service worker register
