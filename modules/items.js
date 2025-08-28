@@ -45,8 +45,8 @@ function ensureItemForm(){
 }
 
 // Modal helpers
-function openModal(id){ qs('#'+id)?.classList.add('open'); }  // use same pattern as shell [4]
-function closeModal(id){ qs('#'+id)?.classList.remove('open'); }  // close utility for form buttons [4]
+function openModal(id){ qs('#'+id)?.classList.add('open'); }
+function closeModal(id){ qs('#'+id)?.classList.remove('open'); }
 
 // Render compact item cards under the calculator
 function renderCards(mountEl, state){
@@ -55,6 +55,7 @@ function renderCards(mountEl, state){
     const n1=(it.name1||'').toLowerCase(), n2=(it.name2||'').toLowerCase(), n3=(it.name3||'').toLowerCase();
     return n1.includes(q)||n2.includes(q)||n3.includes(q);
   });
+
   mountEl.innerHTML = '';
   if (!items.length){
     const empty = document.createElement('div');
@@ -64,30 +65,46 @@ function renderCards(mountEl, state){
     mountEl.appendChild(empty);
     return;
   }
+
   const frag = document.createDocumentFragment();
   items.forEach((it)=>{
     const card = document.createElement('div');
     card.className='card';
-    card.innerHTML = `
-      <div class="card-row">
-        <div class="names">${it.name1} <span class="sep">/</span> ${it.name2} <span class="sep">/</span> ${it.name3}</div>
-        <div class="row-icons"><button class="small-btn" data-edit="${it.id}">✏️</button></div>
+
+    // Header row: names left, pencil right
+    const head = document.createElement('div');
+    head.className = 'card-row';
+    head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px';
+    head.innerHTML = `
+      <div class="names" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        ${it.name1} <span class="sep">/</span> ${it.name2} <span class="sep">/</span> ${it.name3}
       </div>
-      <div class="meta">
-        <div class="sell">₹${(+it.sprice||0).toFixed(2)}/kg</div>
-        <div class="buy" style="font-size:.45rem;opacity:.75">₹${(+it.bprice||0).toFixed(2)}/kg</div>
+      <div class="row-icons" style="flex:0 0 auto">
+        <button class="small-btn" data-edit="${it.id}" title="Edit">✏️</button>
       </div>
     `;
+    card.appendChild(head);
+
+    // Meta row: sell (normal), bought (10% bigger than before)
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:2px';
+    meta.innerHTML = `
+      <div class="sell" style="font-size:.9rem">₹${(+it.sprice||0).toFixed(2)}/kg</div>
+      <div class="buy"  style="font-size:.5rem;opacity:.75">₹${(+it.bprice||0).toFixed(2)}/kg</div>
+    `;
+    card.appendChild(meta);
+
     frag.appendChild(card);
   });
+
   mountEl.appendChild(frag);
 }
 
-// Public initializer
 export async function initItems(mountEl, state){
   if(!mountEl) return;
 
-  // Load any saved items into state from IndexedDB [5]
+  // Load any saved items into state from IndexedDB
   try {
     const existing = await dbGet(KEYS.items);
     if (Array.isArray(existing)) state.items = existing;
@@ -152,7 +169,7 @@ export async function initItems(mountEl, state){
       const it = state.items.find(x=>x.id===editingId);
       if (it) Object.assign(it, payload);
     }
-    await dbSet(KEYS.items, state.items).catch(()=>{});  // persist to IndexedDB [5]
+    await dbSet(KEYS.items, state.items).catch(()=>{});
     closeModal('itemModal');
     render();
   }
@@ -163,16 +180,16 @@ export async function initItems(mountEl, state){
     if(!it) return;
     if(confirm(`Delete "${it.name1} / ${it.name2} / ${it.name3}"?`)){
       state.items = state.items.filter(x=>x.id!==editingId);
-      await dbSet(KEYS.items, state.items).catch(()=>{});  // persist deletion [5]
+      await dbSet(KEYS.items, state.items).catch(()=>{});
       closeModal('itemModal');
       render();
     }
   }
 
   // Wire UI events
-  fab?.addEventListener('click', startAdd);  // bind floating ＋ to open modal [4]
-  form?.addEventListener('submit', onSubmit);  // save handler [4]
-  delBtn?.addEventListener('click', onDelete); // delete handler [4]
+  fab?.addEventListener('click', startAdd);
+  form?.addEventListener('submit', onSubmit);
+  delBtn?.addEventListener('click', onDelete);
 
   mountEl.addEventListener('click', (e)=>{
     const edit = e.target.getAttribute('data-edit');
@@ -180,7 +197,7 @@ export async function initItems(mountEl, state){
   });
 
   // Live search re-render
-  qs('#searchInput')?.addEventListener('input', render);  // re-render on contains-match [4]
+  qs('#searchInput')?.addEventListener('input', render);
 
   // Initial paint
   render();
