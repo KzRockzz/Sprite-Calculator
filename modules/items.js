@@ -1,11 +1,11 @@
 // modules/items.js
 import { get as dbGet, set as dbSet, KEYS } from './storage.js';
 
-// Small helpers
+// DOM helpers
 const qs  = (s, r=document) => r.querySelector(s);
 const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
-// Build the add/edit item form inside the existing modal shell
+// Install the add/edit form inside the existing item modal body
 function ensureItemForm(){
   const body = qs('#itemModalBody');
   if (!body) return;
@@ -44,7 +44,11 @@ function ensureItemForm(){
   `;
 }
 
-// Card renderer
+// Modal helpers
+function openModal(id){ qs('#'+id)?.classList.add('open'); }  // use same pattern as shell [4]
+function closeModal(id){ qs('#'+id)?.classList.remove('open'); }  // close utility for form buttons [4]
+
+// Render compact item cards under the calculator
 function renderCards(mountEl, state){
   const q = (qs('#searchInput')?.value || '').trim().toLowerCase();
   const items = !q ? state.items : state.items.filter(it => {
@@ -60,9 +64,8 @@ function renderCards(mountEl, state){
     mountEl.appendChild(empty);
     return;
   }
-
   const frag = document.createDocumentFragment();
-  items.forEach((it, idx)=>{
+  items.forEach((it)=>{
     const card = document.createElement('div');
     card.className='card';
     card.innerHTML = `
@@ -80,42 +83,40 @@ function renderCards(mountEl, state){
   mountEl.appendChild(frag);
 }
 
-// Open/close modal helpers
-function openModal(id){ qs('#'+id)?.classList.add('open'); }
-function closeModal(id){ qs('#'+id)?.classList.remove('open'); }
-
+// Public initializer
 export async function initItems(mountEl, state){
   if(!mountEl) return;
 
-  // Load items from DB if caller hasn't already
+  // Load any saved items into state from IndexedDB [5]
   try {
     const existing = await dbGet(KEYS.items);
     if (Array.isArray(existing)) state.items = existing;
   } catch {}
 
-  // Wire form into modal
+  // Ensure form exists in the modal body
   ensureItemForm();
 
   // Elements
   const fab = qs('#fab');
   const form = qs('#itemForm');
+  const title = qs('#itemModalTitle');
   const name1 = qs('#name1');
   const name2 = qs('#name2');
   const name3 = qs('#name3');
   const sprice = qs('#sprice');
   const bprice = qs('#bprice');
-  const deleteBtn = qs('#itemDeleteBtn');
-  const title = qs('#itemModalTitle');
+  const delBtn = qs('#itemDeleteBtn');
 
-  // Track which item is being edited (null => adding)
+  // Editing state
   let editingId = null;
+  const genId = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
 
   function render(){ renderCards(mountEl, state); }
 
   function startAdd(){
     editingId = null;
     title.textContent='Add item';
-    deleteBtn.style.display='none';
+    delBtn.style.display='none';
     name1.value=''; name2.value=''; name3.value='';
     sprice.value=''; bprice.value='';
     openModal('itemModal');
@@ -127,16 +128,13 @@ export async function initItems(mountEl, state){
     if(!it) return;
     editingId = id;
     title.textContent='Edit item';
-    deleteBtn.style.display='inline-block';
+    delBtn.style.display='inline-block';
     name1.value=it.name1||''; name2.value=it.name2||''; name3.value=it.name3||'';
     sprice.value=it.sprice||''; bprice.value=it.bprice||'';
     openModal('itemModal');
   }
 
-  // Generate id
-  const genId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
-
-  async function saveItem(e){
+  async function onSubmit(e){
     e.preventDefault();
     const payload = {
       name1: name1.value.trim(),
@@ -145,43 +143,44 @@ export async function initItems(mountEl, state){
       sprice: +(+sprice.value||0).toFixed(2),
       bprice: +(+bprice.value||0).toFixed(2)
     };
-    if(!(payload.name1 && payload.name2 && payload.name3)) { alert('Please fill all three names.'); return; }
-
+    if(!(payload.name1 && payload.name2 && payload.name3)){
+      alert('Please fill all three names.'); return;
+    }
     if(!editingId){
       state.items.unshift({ id: genId(), ...payload });
-    } else {
+    }else{
       const it = state.items.find(x=>x.id===editingId);
       if (it) Object.assign(it, payload);
     }
-    await dbSet(KEYS.items, state.items).catch(()=>{});
+    await dbSet(KEYS.items, state.items).catch(()=>{});  // persist to IndexedDB [5]
     closeModal('itemModal');
     render();
   }
 
-  async function deleteItem(){
+  async function onDelete(){
     if(!editingId) return;
     const it = state.items.find(x=>x.id===editingId);
     if(!it) return;
     if(confirm(`Delete "${it.name1} / ${it.name2} / ${it.name3}"?`)){
       state.items = state.items.filter(x=>x.id!==editingId);
-      await dbSet(KEYS.items, state.items).catch(()=>{});
+      await dbSet(KEYS.items, state.items).catch(()=>{});  // persist deletion [5]
       closeModal('itemModal');
       render();
     }
   }
 
-  // Wire events
-  fab?.addEventListener('click', startAdd);
-  form?.addEventListener('submit', saveItem);
-  deleteBtn?.addEventListener('click', deleteItem);
+  // Wire UI events
+  fab?.addEventListener('click', startAdd);  // bind floating ＋ to open modal [4]
+  form?.addEventListener('submit', onSubmit);  // save handler [4]
+  delBtn?.addEventListener('click', onDelete); // delete handler [4]
 
   mountEl.addEventListener('click', (e)=>{
     const edit = e.target.getAttribute('data-edit');
     if(edit){ startEdit(edit); }
   });
 
-  // Re-render on search input changes (contains match)
-  qs('#searchInput')?.addEventListener('input', render);
+  // Live search re-render
+  qs('#searchInput')?.addEventListener('input', render);  // re-render on contains-match [4]
 
   // Initial paint
   render();
