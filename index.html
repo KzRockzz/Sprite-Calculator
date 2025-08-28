@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>The List</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0f1115" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="dark">
+  <header class="header">
+    <div class="title">The List</div>
+    <div class="actions">
+      <button class="icon-btn" data-open="historyModal" title="Bill history"><span class="only">🧾</span></button>
+      <button class="icon-btn" data-open="settingsModal" title="Settings"><span class="only">⚙️</span></button>
+      <button class="icon-btn" id="themeBtn" title="Theme"><span class="only">🌙</span></button>
+      <button class="icon-btn" data-open="calcModal" title="Calculator"><span class="only">🧮</span></button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section id="calcMount"></section>
+    <section id="listMount"></section>
+  </main>
+
+  <button id="fab" class="fab" title="Add">＋</button>
+
+  <div id="searchWrap" class="search-wrap" aria-label="Search bar">
+    <div class="search-inner">
+      <div class="search" style="flex:1">
+        <span>🔎</span>
+        <input id="searchInput" type="text" placeholder="Search any part of name…" autocapitalize="none" autocomplete="off" spellcheck="false" />
+        <button id="clearSearchBtn" class="icon-btn" style="min-width:30px;height:30px">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Calculator modal (placeholder; real UI lands next steps) -->
+  <div class="modal" id="calcModal" role="dialog" aria-modal="true">
+    <div class="backdrop" data-close="calcModal"></div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="sheet-head">
+        <div class="title-sm">Calculator</div>
+        <button class="small-btn" data-close="calcModal">✕</button>
+      </div>
+      <div class="sheet-body">
+        <p class="muted">Calculator base will render here in Step 3.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit item modal (separate feature module) -->
+  <div class="modal" id="itemModal" role="dialog" aria-modal="true">
+    <div class="backdrop" data-close="itemModal"></div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="sheet-head">
+        <div class="title-sm" id="itemModalTitle">Add item</div>
+        <button class="small-btn" data-close="itemModal">✕</button>
+      </div>
+      <div class="sheet-body" id="itemModalBody">
+        <p class="muted">Form fields will appear here in Step 4.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- History modal -->
+  <div class="modal" id="historyModal" role="dialog" aria-modal="true">
+    <div class="backdrop" data-close="historyModal"></div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="sheet-head">
+        <div class="title-sm">Bill history</div>
+        <button class="small-btn" data-close="historyModal">✕</button>
+      </div>
+      <div class="sheet-body" id="historyBody">
+        <p class="muted">Saved receipts will appear here in Step 5.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div class="modal" id="settingsModal" role="dialog" aria-modal="true">
+    <div class="backdrop" data-close="settingsModal"></div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="sheet-head">
+        <div class="title-sm">Settings</div>
+        <button class="small-btn" data-close="settingsModal">✕</button>
+      </div>
+      <div class="sheet-body">
+        <label class="row">Font scale <input id="fontScale" type="range" min="0.85" max="1.15" step="0.01" /></label>
+        <label class="row">Accent <input id="accentPick" type="color" /></label>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
