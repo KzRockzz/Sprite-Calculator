@@ -31,6 +31,7 @@ function ensureItemForm(){
   `;
 }
 
+// Basic modal helpers
 function openModal(id){ qs('#'+id)?.classList.add('open'); }
 function closeModal(id){ qs('#'+id)?.classList.remove('open'); }
 
@@ -59,18 +60,19 @@ function renderCards(mountEl, state, ui){
   items.forEach((it)=>{
     const card=document.createElement('div'); card.className='card';
 
+    // Header row: name is the toggle target
     const head=document.createElement('div'); head.className='card-row';
     head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:6px';
     head.innerHTML = `
-      <div class="names" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+      <div class="names" data-open-item="${it.id}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer">
         ${it.name1} <span class="sep">/</span> ${it.name2} <span class="sep">/</span> ${it.name3}
       </div>
       <div style="display:flex;align-items:center;gap:6px">
-        <button class="small-btn" data-toggle="${it.id}" title="Open actions">▾</button>
         <button class="small-btn" data-edit="${it.id}" title="Edit">✏️</button>
       </div>`;
     card.appendChild(head);
 
+    // Meta row
     const meta=document.createElement('div'); meta.className='meta';
     meta.style.cssText='display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:2px';
     meta.innerHTML = `
@@ -78,10 +80,12 @@ function renderCards(mountEl, state, ui){
       <div class="buy"  style="font-size:.5rem;opacity:.75">₹${(+it.bprice||0).toFixed(2)}/kg</div>`;
     card.appendChild(meta);
 
+    // Dropdown under the card if open
     if(ui.openId===it.id){
       const dd=document.createElement('div'); dd.className='dropdown';
       dd.style.cssText='margin-top:8px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);padding:8px';
 
+      // Chips row (weight → ₹)
       const chips=document.createElement('div'); chips.style.cssText='display:flex;gap:6px;overflow:auto;padding:2px 0';
       const sp=+it.sprice||0;
       (it.presets?.weight?.length? it.presets.weight : DEFAULT_WEIGHT).forEach(g=>{
@@ -94,6 +98,7 @@ function renderCards(mountEl, state, ui){
       });
       dd.appendChild(chips);
 
+      // Converter row (₹ only, minimal)
       const conv=document.createElement('div'); conv.style.cssText='display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap';
       conv.innerHTML = `
         <label style="display:flex;align-items:center;gap:6px">
@@ -142,11 +147,15 @@ export async function initItems(mountEl, state){
   try { const existing = await dbGet(KEYS.items); if(Array.isArray(existing)) state.items = existing; } catch {}
   ensureItemForm();
 
+  // Elements
   const fab=qs('#fab'); const form=qs('#itemForm'); const title=qs('#itemModalTitle');
   const name1=qs('#name1'); const name2=qs('#name2'); const name3=qs('#name3');
   const sprice=qs('#sprice'); const bprice=qs('#bprice'); const delBtn=qs('#itemDeleteBtn');
 
+  // UI drop state
   const ui = { openId:null };
+
+  // Editing state
   let editingId=null;
   const genId = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
 
@@ -186,13 +195,24 @@ export async function initItems(mountEl, state){
     }
   }
 
+  // Events
   fab?.addEventListener('click', startAdd);
   form?.addEventListener('submit', onSubmit);
   delBtn?.addEventListener('click', onDelete);
 
   mountEl.addEventListener('click', (e)=>{
-    const edit=e.target.getAttribute('data-edit'); if(edit){ startEdit(edit); return; }
-    const toggle=e.target.getAttribute('data-toggle'); if(toggle){ ui.openId = (ui.openId===toggle? null : toggle); render(); return; }
+    // Edit pencil
+    const edit=e.target.getAttribute('data-edit'); 
+    if(edit){ startEdit(edit); return; }
+
+    // Toggle dropdown by tapping the name area
+    const openEl = e.target.closest('[data-open-item]');
+    if(openEl){
+      const id = openEl.getAttribute('data-open-item');
+      ui.openId = (ui.openId===id ? null : id);
+      render();
+      return;
+    }
   });
 
   qs('#searchInput')?.addEventListener('input', render);
