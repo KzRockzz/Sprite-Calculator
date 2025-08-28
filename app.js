@@ -1,23 +1,40 @@
-// app.js (ES module)
+// app.js (ES module) — Step 2 wiring with storage
+import { get as dbGet, set as dbSet, KEYS } from './modules/storage.js';
+
 const qs = (s, r=document) => r.querySelector(s);
 const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
-// Theme toggle
+// ---------- State skeleton (will expand next steps)
+const state = {
+  items: [],
+  recentSearches: [],
+  recentItems: [],
+  calc: { lines: [], total: 0 },
+  bills: [],
+  settings: { fontScale: 1, accent: '#59d1ff' },
+  theme: 'dark'
+};
+
+// ---------- Theme toggle
 const themeBtn = qs('#themeBtn');
 function applyTheme(t) {
   document.body.classList.toggle('light', t==='light');
   document.body.classList.toggle('dark', t!=='light');
   themeBtn.querySelector('.only').textContent = t==='light' ? '☀️' : '🌙';
 }
-let theme = localStorage.getItem('theme') || 'dark';
-applyTheme(theme);
-themeBtn.addEventListener('click', () => {
-  theme = (theme==='dark' ? 'light' : 'dark');
-  localStorage.setItem('theme', theme);
-  applyTheme(theme);
+themeBtn.addEventListener('click', async () => {
+  state.theme = (state.theme==='dark' ? 'light' : 'dark');
+  applyTheme(state.theme);
+  try { await dbSet(KEYS.theme, state.theme); } catch {}
 });
 
-// Simple modal wiring
+// ---------- Settings helpers
+function applySettings() {
+  document.documentElement.style.setProperty('--font-scale', state.settings.fontScale);
+  document.documentElement.style.setProperty('--accent', state.settings.accent);
+}
+
+// ---------- Simple modal wiring
 document.addEventListener('click', (e)=>{
   const openId = e.target.getAttribute('data-open');
   if (openId) { qs(`#${openId}`)?.classList.add('open'); }
@@ -29,7 +46,7 @@ document.addEventListener('click', (e)=>{
   }
 });
 
-// Keyboard lift via VisualViewport + VirtualKeyboard
+// ---------- Keyboard lift via VisualViewport + VirtualKeyboard
 (function keyboardLift(){
   function setKb(px){ document.documentElement.style.setProperty('--kb', Math.max(0, px) + 'px'); }
   if ('virtualKeyboard' in navigator) {
@@ -46,9 +63,36 @@ document.addEventListener('click', (e)=>{
   }
 })();
 
-// Service worker register (shell now, richer logic next steps)
+// ---------- Load persisted state, then render shell
+async function loadAll() {
+  try {
+    const [items, rSearch, rItems, calc, bills, settings, theme] = await Promise.all([
+      dbGet(KEYS.items), dbGet(KEYS.recentSearches), dbGet(KEYS.recentItems),
+      dbGet(KEYS.calc), dbGet(KEYS.bills), dbGet(KEYS.settings), dbGet(KEYS.theme)
+    ]);
+    if (Array.isArray(items)) state.items = items;
+    if (Array.isArray(rSearch)) state.recentSearches = rSearch;
+    if (Array.isArray(rItems)) state.recentItems = rItems;
+    if (calc && Array.isArray(calc.lines)) state.calc = calc;
+    if (Array.isArray(bills)) state.bills = bills.slice(0,20);
+    if (settings) Object.assign(state.settings, settings);
+    if (theme === 'light' || theme === 'dark') state.theme = theme;
+  } catch {}
+
+  applyTheme(state.theme);
+  applySettings();
+
+  // Placeholder mounts (calculator and list modules arrive next)
+  qs('#calcMount').innerHTML = '';
+  qs('#listMount').innerHTML = '';
+}
+
+// ---------- Service worker register
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
   });
 }
+
+// ---------- Boot
+loadAll();
