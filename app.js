@@ -1,4 +1,4 @@
-// app.js (ES module) — Step 2 + Calculator + Items list
+// app.js (ES module) — Calculator + Items wired
 import { get as dbGet, set as dbSet, KEYS } from './modules/storage.js';
 import { initCalculator } from './modules/calculator.js';
 import { initItems } from './modules/items.js';
@@ -6,7 +6,7 @@ import { initItems } from './modules/items.js';
 const qs  = (s, r=document) => r.querySelector(s);
 const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
-// ---------- State
+// ---------- State kept in IndexedDB [5]
 const state = {
   items: [],
   recentSearches: [],
@@ -17,7 +17,7 @@ const state = {
   theme: 'dark'
 };
 
-// ---------- Theme
+// ---------- Theme toggle
 const themeBtn = qs('#themeBtn');
 function applyTheme(t) {
   document.body.classList.toggle('light', t==='light');
@@ -38,7 +38,7 @@ function applySettings() {
   document.documentElement.style.setProperty('--accent', state.settings.accent);
 }
 
-// ---------- Modals
+// ---------- Generic modal wiring via data-open/data-close [4]
 document.addEventListener('click', (e)=>{
   const openId = e.target.getAttribute('data-open');
   if (openId) { qs(`#${openId}`)?.classList.add('open'); }
@@ -50,7 +50,7 @@ document.addEventListener('click', (e)=>{
   }
 });
 
-// ---------- Keyboard lift
+// ---------- Keyboard lift for mobile [4]
 (function keyboardLift(){
   function setKb(px){ document.documentElement.style.setProperty('--kb', Math.max(0, px) + 'px'); }
   if ('virtualKeyboard' in navigator) {
@@ -67,7 +67,7 @@ document.addEventListener('click', (e)=>{
   }
 })();
 
-// ---------- Load + mount
+// ---------- Load persisted state then mount modules [5]
 async function loadAll() {
   try {
     const [items, rSearch, rItems, calc, bills, settings, theme] = await Promise.all([
@@ -86,12 +86,12 @@ async function loadAll() {
   applyTheme(state.theme);
   applySettings();
 
-  // Mount base UI modules
-  initCalculator(document.getElementById('calcMount'), state);
-  initItems(document.getElementById('listMount'), state);
+  // Mount base UI
+  initCalculator(document.getElementById('calcMount'), state);  // calculator first [6]
+  initItems(document.getElementById('listMount'), state);       // items list + FAB modal [6]
 }
 
-// ---------- SW
+// ---------- Service worker register; reload twice to activate updates [3]
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
