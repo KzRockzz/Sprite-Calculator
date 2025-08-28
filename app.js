@@ -1,11 +1,12 @@
-// app.js (ES module) — Step 2 + Calculator base mounted
+// app.js (ES module) — Step 2 + Calculator + Items list
 import { get as dbGet, set as dbSet, KEYS } from './modules/storage.js';
 import { initCalculator } from './modules/calculator.js';
+import { initItems } from './modules/items.js';
 
 const qs  = (s, r=document) => r.querySelector(s);
 const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
-// ---------- State skeleton (will expand next steps)
+// ---------- State
 const state = {
   items: [],
   recentSearches: [],
@@ -16,7 +17,7 @@ const state = {
   theme: 'dark'
 };
 
-// ---------- Theme toggle
+// ---------- Theme
 const themeBtn = qs('#themeBtn');
 function applyTheme(t) {
   document.body.classList.toggle('light', t==='light');
@@ -31,13 +32,13 @@ themeBtn?.addEventListener('click', async () => {
   try { await dbSet(KEYS.theme, state.theme); } catch {}
 });
 
-// ---------- Settings helpers
+// ---------- Settings
 function applySettings() {
   document.documentElement.style.setProperty('--font-scale', state.settings.fontScale);
   document.documentElement.style.setProperty('--accent', state.settings.accent);
 }
 
-// ---------- Simple modal wiring
+// ---------- Modals
 document.addEventListener('click', (e)=>{
   const openId = e.target.getAttribute('data-open');
   if (openId) { qs(`#${openId}`)?.classList.add('open'); }
@@ -49,7 +50,7 @@ document.addEventListener('click', (e)=>{
   }
 });
 
-// ---------- Keyboard lift via VisualViewport + VirtualKeyboard
+// ---------- Keyboard lift
 (function keyboardLift(){
   function setKb(px){ document.documentElement.style.setProperty('--kb', Math.max(0, px) + 'px'); }
   if ('virtualKeyboard' in navigator) {
@@ -66,7 +67,7 @@ document.addEventListener('click', (e)=>{
   }
 })();
 
-// ---------- Load persisted state, then render shell + calculator
+// ---------- Load + mount
 async function loadAll() {
   try {
     const [items, rSearch, rItems, calc, bills, settings, theme] = await Promise.all([
@@ -85,11 +86,12 @@ async function loadAll() {
   applyTheme(state.theme);
   applySettings();
 
-  // Mount calculator as the base UI
+  // Mount base UI modules
   initCalculator(document.getElementById('calcMount'), state);
+  initItems(document.getElementById('listMount'), state);
 }
 
-// ---------- Service worker register
+// ---------- SW
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
