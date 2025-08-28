@@ -1,11 +1,20 @@
 // modules/calculator.js
 import { get as dbGet, set as dbSet, KEYS } from './storage.js';
 
-// Rounding: floor to rupee unless fractional ≥ 0.9 then ceil
-function rupeeRound(x){
-  const f = x - Math.floor(x);
-  return (f >= 0.9) ? Math.ceil(x) : Math.floor(x);
+/*
+  Money rounding rule:
+  - Compute integer paise to avoid floating-point error.
+  - Floor to rupee unless fractional part is ≥ 90 paise, then round up by ₹1.
+  - Example: 55.8 -> 55; 55.9 -> 56.
+*/
+function rupeeRound(x) {
+  const n = Number(x) || 0;
+  const base = Math.floor(n);                         // integer rupees
+  const paise = Math.round((n - base) * 100);         // 0..99, robust to FP error
+  return paise >= 90 ? base + 1 : base;
 }
+
+// Format totals with small decimals for readability
 function fmtMain(n){
   const v = (Number(n)||0).toFixed(2);
   const [a,b] = v.split('.');
@@ -28,7 +37,8 @@ export function initCalculator(mountEl, state){
     <div id="cMini" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <label style="display:flex;align-items:center;gap:6px">
         <span>₹</span>
-        <input id="cMiniPrice" type="number" inputmode="decimal" step="0.01" min="0" style="width:120px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;padding:6px 8px" />
+        <input id="cMiniPrice" type="number" inputmode="decimal" step="0.01" min="0"
+               style="width:140px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;padding:6px 8px" />
       </label>
       <div id="cMiniView" style="font-weight:800">${fmtMain(0)}</div>
       <button class="small-btn" id="cMiniAdd" title="Add to bill" disabled>＋</button>
@@ -50,6 +60,7 @@ export function initCalculator(mountEl, state){
     clearAll: wrap.querySelector('#cClearAll')
   };
 
+  // Local mini amount in rupees (integer after rupeeRound)
   let mini = 0;
 
   function renderList(){
@@ -59,17 +70,21 @@ export function initCalculator(mountEl, state){
 
     state.calc.lines.forEach((ln, idx)=>{
       total += ln.lineTotal;
+
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.08);padding:8px 0;gap:8px';
+
       const left = document.createElement('div');
       left.style.cssText='flex:1;min-width:0';
       left.innerHTML = `
         <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ln.itemName || 'Item'}</div>
         <div class="small-muted">${ln.grams? (ln.grams+'g') : ''} ${ln.grams&&ln.price? '•' : ''} ${ln.price? ('₹'+ln.price) : ''}</div>
       `;
+
       const right = document.createElement('div');
       right.style.cssText='display:flex;align-items:center;gap:8px';
       right.innerHTML = `<div>${fmtMain(ln.lineTotal)}</div><button class="small-btn" data-del="${idx}">✕</button>`;
+
       row.append(left, right);
       frag.appendChild(row);
     });
@@ -85,11 +100,14 @@ export function initCalculator(mountEl, state){
     el.miniAdd.disabled = mini <= 0;
   }
 
+  // Events
   el.miniPrice.addEventListener('input', ()=>{
-    const p = parseFloat(el.miniPrice.value)||0;
-    mini = rupeeRound(p);
+    const raw = parseFloat(el.miniPrice.value);
+    const safe = isNaN(raw) || raw < 0 ? 0 : raw;
+    mini = rupeeRound(safe);
     updateMiniView();
   });
+
   el.miniAdd.addEventListener('click', ()=>{
     if(mini<=0) return;
     state.calc.lines.push({
@@ -103,6 +121,7 @@ export function initCalculator(mountEl, state){
     updateMiniView();
     renderList();
   });
+
   el.miniClear.addEventListener('click', ()=>{
     el.miniPrice.value = '';
     mini = 0;
@@ -127,7 +146,12 @@ export function initCalculator(mountEl, state){
 
   el.saveBill.addEventListener('click', async ()=>{
     if(state.calc.lines.length===0){ alert('Nothing to save.'); return; }
-    const receipt = { id: crypto.randomUUID?.() || String(Date.now()), ts: Date.now(), lines: JSON.parse(JSON.stringify(state.calc.lines)), total: state.calc.total };
+    const receipt = {
+      id: (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()),
+      ts: Date.now(),
+      lines: JSON.parse(JSON.stringify(state.calc.lines)),
+      total: state.calc.total
+    };
     const bills = (await dbGet(KEYS.bills)) || [];
     bills.unshift(receipt);
     await dbSet(KEYS.bills, bills.slice(0,20)).catch(()=>{});
@@ -136,7 +160,9 @@ export function initCalculator(mountEl, state){
     alert('Saved to Bill history.');
   });
 
+  // Initial paint
   renderList();
   updateMiniView();
+
   return { renderList };
 }
