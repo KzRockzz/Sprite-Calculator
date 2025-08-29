@@ -7,6 +7,7 @@ const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
 const DEFAULT_WEIGHT = [50,100,500,1000];
 
+// ---------- Modal form scaffold ----------
 function ensureItemForm(){
   const body = qs('#itemModalBody');
   if (!body || body.dataset.wired==='1') return;
@@ -27,37 +28,93 @@ function ensureItemForm(){
       </div>
     </form>
   `;
-} [6]
+}
 
-function openModal(id){ qs('#'+id)?.classList.add('open'); } [4]
-function closeModal(id){ qs('#'+id)?.classList.remove('open'); } [4]
+function openModal(id){ qs('#'+id)?.classList.add('open'); }
+function closeModal(id){ qs('#'+id)?.classList.remove('open'); }
 
-function gramsToPrice(sp, g){ return (Number(sp)||0) * (g/1000); } [4]
-function rupeeRound(x){ const n=Number(x)||0; const r=Math.floor(n); const p=Math.round((n-r)*100); return p>=90? r+1 : r; } [4]
+// ---------- Helpers ----------
+function gramsToPrice(sp, g){ return (Number(sp)||0) * (g/1000); }
+function rupeeRound(x){ const n=Number(x)||0; const r=Math.floor(n); const p=Math.round((n-r)*100); return p>=90? r+1 : r; }
+function normalizeGramEntry(entry){ let val=entry; if(entry&&typeof entry==='object'){ val=('val'in entry)?entry.val:('value'in entry?entry.value:entry); } const grams=Math.max(0,parseFloat(val)||0); const label=grams===1000?'1kg':`${grams}g`; return { grams, label }; }
+function displayNameOf(it){ const idx=Number(it.showNameIdx||0)%3; const names=[it.name1||'',it.name2||'',it.name3||'']; return names[idx] || it.name1 || it.name2 || it.name3 || ''; }
 
-// Normalize preset entry → numeric grams and label (1kg for 1000g)
-function normalizeGramEntry(entry){
-  let val = entry;
-  if (entry && typeof entry==='object'){
-    val = ('val' in entry) ? entry.val : (('value' in entry) ? entry.value : entry);
+// ---------- Keypad for dropdown long‑press (with decimal) ----------
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function showMultiplierPad(anchorBtn, baseValue, onApply){
+  if(!baseValue || baseValue<=0) return;
+  let multStr = '1';
+  function valid(s){
+    // allow digits with at most one decimal point, no leading empty except "0."
+    return /^(\d+(\.\d{0,4})?)$/.test(s);
   }
-  const grams = Math.max(0, parseFloat(val)||0);
-  const label = grams===1000 ? '1kg' : `${grams}g`;
-  return { grams, label };
-} [4]
 
-function displayNameOf(it){
-  const idx = Number(it.showNameIdx||0)%3;
-  const names = [it.name1||'', it.name2||'', it.name3||''];
-  return names[idx] || it.name1 || it.name2 || it.name3 || '';
-} [4]
+  const pad=document.createElement('div');
+  pad.setAttribute('role','dialog');
+  pad.style.cssText='position:fixed;z-index:1000;background:#11151f;color:#e8eaed;border:1px solid rgba(255,255,255,.12);border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.35);padding:8px;width:200px';
 
+  const head=document.createElement('div');
+  head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px;font-weight:700';
+  const titleLeft=document.createElement('div'); titleLeft.textContent='Multiply';
+  const closeBtn=document.createElement('button'); closeBtn.className='small-btn'; closeBtn.textContent='✕';
+  head.append(titleLeft, closeBtn);
+  pad.appendChild(head);
+
+  const preview=document.createElement('div');
+  preview.style.cssText='font-size:.85rem;opacity:.85;margin-bottom:6px';
+  preview.textContent = `${baseValue} × ${multStr}`;
+  pad.appendChild(preview);
+
+  const grid=document.createElement('div');
+  grid.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:6px';
+  const keys = ['1','2','3','.','4','5','6','0','7','8','9','←','C','×10','OK','✕'];
+  keys.forEach(k=>{
+    const b=document.createElement('button'); b.className='small-btn'; b.textContent=k; b.setAttribute('data-k',k); b.style.height='36px'; grid.appendChild(b);
+  });
+  pad.appendChild(grid);
+
+  const r = anchorBtn.getBoundingClientRect();
+  const W=200, H=210;
+  let top=r.bottom+8, left=r.left-(W-r.width);
+  top=clamp(top,8,window.innerHeight-H-8);
+  left=clamp(left,8,window.innerWidth-W-8);
+  pad.style.top=`${top}px`; pad.style.left=`${left}px`;
+
+  const bd=document.createElement('div');
+  bd.style.cssText='position:fixed;inset:0;z-index:999;background:transparent';
+
+  function close(){ pad.remove(); bd.remove(); }
+  function apply(){
+    const m=parseFloat(multStr)||0;
+    if(m>0 && onApply){ onApply(m); }
+    close();
+  }
+
+  bd.addEventListener('click', close);
+  closeBtn.addEventListener('click', close);
+  pad.addEventListener('click', (e)=>{
+    const k = e.target.getAttribute('data-k'); if(!k) return;
+    if(k==='✕'){ close(); return; }
+    if(k==='C'){ multStr='1'; preview.textContent=`${baseValue} × ${multStr}`; return; }
+    if(k==='←'){ multStr=multStr.length>1? multStr.slice(0,-1):'1'; preview.textContent=`${baseValue} × ${multStr}`; return; }
+    if(k==='×10'){ multStr=String((parseFloat(multStr)||0)*10||10); preview.textContent=`${baseValue} × ${multStr}`; return; }
+    if(k==='OK'){ apply(); return; }
+    // digits / dot
+    let next = multStr==='1' && k!=='.' ? k : (multStr + k);
+    if(k==='.' && multStr.includes('.')) next = multStr; // only one dot
+    if(valid(next)){ multStr=next; preview.textContent=`${baseValue} × ${multStr}`; }
+  });
+
+  document.body.append(bd,pad);
+}
+
+// ---------- Cards render ----------
 function renderCards(mountEl, state, ui){
   const q = (qs('#searchInput')?.value || '').trim().toLowerCase();
   const filtered = !q ? state.items : state.items.filter(it => {
     const n1=(it.name1||'').toLowerCase(), n2=(it.name2||'').toLowerCase(), n3=(it.name3||'').toLowerCase();
     return n1.includes(q)||n2.includes(q)||n3.includes(q);
-  }); [4]
+  });
 
   mountEl.innerHTML = '';
   if (!filtered.length){
@@ -67,17 +124,15 @@ function renderCards(mountEl, state, ui){
     empty.textContent='No items yet. Tap + to add.';
     mountEl.appendChild(empty);
     return;
-  } [4]
+  }
 
   const frag = document.createDocumentFragment();
 
   filtered.forEach((it)=>{
-    // Ensure showNameIdx exists in memory (persist on next change)
     if (typeof it.showNameIdx!=='number') it.showNameIdx = 0;
 
     const card=document.createElement('div'); card.className='card';
 
-    // Header row: show one name + small toggle + pencil
     const head=document.createElement('div'); head.className='card-row';
     head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:6px';
     head.innerHTML = `
@@ -89,38 +144,35 @@ function renderCards(mountEl, state, ui){
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <button class="small-btn" data-edit="${it.id}" title="Edit">✏️</button>
-      </div>`; [6]
+      </div>`;
     card.appendChild(head);
 
-    // Meta row
     const meta=document.createElement('div'); meta.className='meta';
     meta.style.cssText='display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:2px';
     meta.innerHTML = `
       <div class="sell" style="font-size:.9rem">₹${(+it.sprice||0).toFixed(2)}/kg</div>
-      <div class="buy"  style="font-size:.5rem;opacity:.75">₹${(+it.bprice||0).toFixed(2)}/kg</div>`; [6]
+      <div class="buy"  style="font-size:.5rem;opacity:.75">₹${(+it.bprice||0).toFixed(2)}/kg</div>`;
     card.appendChild(meta);
 
-    // Dropdown under the card if open
     if(ui.openId===it.id){
       const dd=document.createElement('div'); dd.className='dropdown';
-      dd.style.cssText='margin-top:8px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);padding:8px'; [6]
+      dd.style.cssText='margin-top:8px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);padding:8px';
 
-      // Chips row (weight → ₹, additive taps)
       const chips=document.createElement('div'); chips.style.cssText='display:flex;gap:6px;overflow:auto;padding:2px 0';
       const src=(it.presets?.weight?.length? it.presets.weight : DEFAULT_WEIGHT);
       const sp=+it.sprice||0;
+
       src.forEach(entry=>{
         const { grams, label } = normalizeGramEntry(entry);
         if(grams<=0) return;
         const amount = rupeeRound(gramsToPrice(sp, grams));
         const b=document.createElement('button'); b.className='small-btn'; b.textContent=`${label}\n₹${amount}`;
         b.style.whiteSpace='pre';
-        b.addEventListener('click', ()=>{ addToMiniFromItems(amount); }); // accumulate [4]
+        b.addEventListener('click', ()=>{ addToMiniFromItems(amount); });
         chips.appendChild(b);
-      }); [4]
+      });
       dd.appendChild(chips);
 
-      // Converter row: ₹ input • live mini mirror • ＋ add • ✕ close
       const conv=document.createElement('div'); conv.style.cssText='display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap';
       conv.innerHTML = `
         <label style="display:flex;align-items:center;gap:6px">
@@ -129,33 +181,66 @@ function renderCards(mountEl, state, ui){
                  style="width:120px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;padding:6px 8px" />
         </label>
         <div class="mini-mirror" style="margin-left:auto;font-weight:800">${formatMoney(0)}</div>
-        <button class="small-btn" data-add-now="${it.id}">＋</button>
-        <button class="small-btn" data-close="${it.id}">✕</button>
-      `; [6]
+        <button class="small-btn" data-add-now="${it.id}" title="Add line">＋</button>
+        <button class="small-btn" data-clear-mini="${it.id}" title="Clear mini">−</button>
+        <button class="small-btn" data-close="${it.id}" title="Close">✕</button>
+      `;
       dd.appendChild(conv);
 
-      // Keep mini mirror synced with calculator mini
+      const priceInput = dd.querySelector('input[data-price]');
+      const addBtn = dd.querySelector('button[data-add-now]');
       const mirror = conv.querySelector('.mini-mirror');
-      const off = onMiniChange(v => { if(mirror) mirror.innerHTML = formatMoney(v); }); [4]
+
+      // Keep mirror synced with calculator mini
+      const off = onMiniChange(v => { if(mirror) mirror.innerHTML = formatMoney(v); });
 
       dd.addEventListener('input', (e)=>{
         const pid=e.target.getAttribute('data-price');
         if(pid){ const p=parseFloat(e.target.value)||0; setMiniFromItems(p); }
-      }); [4]
+      });
+
       dd.addEventListener('click', (e)=>{
         const addNow=e.target.getAttribute('data-add-now');
         const close=e.target.getAttribute('data-close');
+        const clear=e.target.getAttribute('data-clear-mini');
+
         if(addNow){
-          const priceInput=dd.querySelector('input[data-price]');
           const p=parseFloat(priceInput?.value)||0;
           const amt=rupeeRound(p);
           if(amt>0){
             addLineFromItems({ itemName: displayNameOf(it), grams:null, price:amt });
             priceInput.value=''; setMiniFromItems(0);
           }
+          return;
         }
-        if(close){ off && off(); ui.openId=null; renderCards(mountEl,state,ui); }
-      }); [4]
+        if(clear){
+          if(priceInput) priceInput.value='';
+          setMiniFromItems(0);
+          return;
+        }
+        if(close){
+          off && off();
+          ui.openId=null; renderCards(mountEl,state,ui);
+          return;
+        }
+      });
+
+      // Long‑press on dropdown ＋ → decimal keypad multiply
+      let lpTimer=null; const LP_MS=450;
+      addBtn.addEventListener('pointerdown', ()=>{
+        if(lpTimer) clearTimeout(lpTimer);
+        const base = parseFloat(priceInput?.value)||0;
+        if(base>0){
+          lpTimer=setTimeout(()=>{
+            showMultiplierPad(addBtn, base, (mult)=>{
+              setMiniFromItems(base*mult);
+            });
+          }, LP_MS);
+        }
+      }, {passive:true});
+      ['pointerup','pointercancel','pointerleave'].forEach(ev=>{
+        addBtn.addEventListener(ev, ()=>{ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; } }, {passive:true});
+      });
 
       card.appendChild(dd);
     }
@@ -164,42 +249,42 @@ function renderCards(mountEl, state, ui){
   });
 
   mountEl.appendChild(frag);
-} [4]
+}
 
+// ---------- Init ----------
 export async function initItems(mountEl, state){
   if(!mountEl) return;
 
-  // Load and ensure showNameIdx defaults
   try { 
     const existing = await dbGet(KEYS.items);
     if(Array.isArray(existing)) existing.forEach(it=>{ if(typeof it.showNameIdx!=='number') it.showNameIdx = 0; });
     if(Array.isArray(existing)) state.items = existing;
-  } catch {} [5]
+  } catch {}
 
-  ensureItemForm(); [6]
+  ensureItemForm();
 
   const fab=qs('#fab'); const form=qs('#itemForm'); const title=qs('#itemModalTitle');
   const name1=qs('#name1'); const name2=qs('#name2'); const name3=qs('#name3');
-  const sprice=qs('#sprice'); const bprice=qs('#bprice'); const delBtn=qs('#itemDeleteBtn'); [4]
+  const sprice=qs('#sprice'); const bprice=qs('#bprice'); const delBtn=qs('#itemDeleteBtn');
 
   const ui = { openId:null };
   let editingId=null;
-  const genId = () => Math.random().toString(36).slice(2)+Date.now().toString(36); [4]
+  const genId = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
 
-  function render(){ renderCards(mountEl,state,ui); } [4]
+  function render(){ renderCards(mountEl,state,ui); }
 
   function startAdd(){
     editingId=null; title.textContent='Add item'; delBtn.style.display='none';
     name1.value=''; name2.value=''; name3.value=''; sprice.value=''; bprice.value='';
     openModal('itemModal'); setTimeout(()=>name1?.focus(),50);
-  } [4]
+  }
   function startEdit(id){
     const it=state.items.find(x=>x.id===id); if(!it) return;
     editingId=id; title.textContent='Edit item'; delBtn.style.display='inline-block';
     name1.value=it.name1||''; name2.value=it.name2||''; name3.value=it.name3||'';
     sprice.value=it.sprice||''; bprice.value=it.bprice||'';
     openModal('itemModal');
-  } [4]
+  }
 
   async function onSubmit(e){
     e.preventDefault();
@@ -211,7 +296,7 @@ export async function initItems(mountEl, state){
     else { const it=state.items.find(x=>x.id===editingId); if(it) Object.assign(it, payload, { showNameIdx: it.showNameIdx??0 }); }
     await dbSet(KEYS.items, state.items).catch(()=>{});
     closeModal('itemModal'); render();
-  } [5]
+  }
   async function onDelete(){
     if(!editingId) return;
     const it=state.items.find(x=>x.id===editingId); if(!it) return;
@@ -220,18 +305,15 @@ export async function initItems(mountEl, state){
       await dbSet(KEYS.items, state.items).catch(()=>{});
       closeModal('itemModal'); render();
     }
-  } [5]
+  }
 
   fab?.addEventListener('click', startAdd);
   form?.addEventListener('submit', onSubmit);
-  delBtn?.addEventListener('click', onDelete); [4]
+  delBtn?.addEventListener('click', onDelete);
 
   mountEl.addEventListener('click', async (e)=>{
-    // Edit pencil
     const edit=e.target.getAttribute('data-edit'); 
     if(edit){ startEdit(edit); return; }
-
-    // Toggle dropdown by tapping the name
     const openEl = e.target.closest('[data-open-item]');
     if(openEl){
       const id = openEl.getAttribute('data-open-item');
@@ -239,8 +321,6 @@ export async function initItems(mountEl, state){
       render();
       return;
     }
-
-    // Cycle between Name 1/2/3
     const cycleId = e.target.getAttribute('data-cycle');
     if(cycleId){
       const it = state.items.find(x=>x.id===cycleId);
@@ -251,9 +331,9 @@ export async function initItems(mountEl, state){
       }
       return;
     }
-  }); [4]
+  });
 
-  qs('#searchInput')?.addEventListener('input', render); [4]
+  qs('#searchInput')?.addEventListener('input', render);
 
   render();
-} [4]
+}
