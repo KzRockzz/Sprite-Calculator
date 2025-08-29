@@ -1,7 +1,7 @@
 // modules/calculator.js
 import { get as dbGet, set as dbSet, KEYS } from './storage.js';
 
-/* Rounding rule (robust to FP): floor unless fractional ≥ 90 paise */
+/* Rounding: floor unless fractional ≥ 90 paise (FP‑safe) */
 function rupeeRound(x){
   const n = Number(x) || 0;
   const r = Math.floor(n);
@@ -14,7 +14,7 @@ function fmtMain(n){
   return `₹${a}<span class="dec">.${b}</span>`;
 }
 
-/* Shared references */
+/* Shared refs */
 let stateRef = null;
 let els = null;
 let mini = 0;
@@ -22,6 +22,13 @@ let mini = 0;
 /* Public helpers for other modules */
 export function setMiniFromItems(amount){
   mini = Math.max(0, rupeeRound(amount||0));
+  if (els?.miniView && els?.miniAdd){
+    els.miniView.innerHTML = fmtMain(mini);
+    els.miniAdd.disabled = mini <= 0;
+  }
+}
+export function addToMiniFromItems(delta){
+  mini = Math.max(0, rupeeRound((mini||0) + (Number(delta)||0)));
   if (els?.miniView && els?.miniAdd){
     els.miniView.innerHTML = fmtMain(mini);
     els.miniAdd.disabled = mini <= 0;
@@ -113,26 +120,22 @@ export function initCalculator(mountEl, state){
     els.miniAdd.disabled = mini <= 0;
   }
 
-  // Input → mini
   els.miniPrice.addEventListener('input', ()=>{
     const raw = parseFloat(els.miniPrice.value)||0;
     mini = rupeeRound(raw);
     updateMiniView();
   });
 
-  // Add line from mini (manual)
   els.miniAdd.addEventListener('click', ()=>{
     if(mini<=0) return;
     stateRef.calc.lines.push({ itemName:'Manual', grams:null, price:mini, lineTotal:rupeeRound(mini) });
     els.miniPrice.value=''; mini=0; updateMiniView(); renderList();
   });
 
-  // Clear mini
   els.miniClear.addEventListener('click', ()=>{
     els.miniPrice.value=''; mini=0; updateMiniView();
   });
 
-  // Delete row
   els.list.addEventListener('click', (e)=>{
     const del = e.target.getAttribute('data-del');
     if(del!=null){
@@ -141,7 +144,6 @@ export function initCalculator(mountEl, state){
     }
   });
 
-  // Clear all, Save bill
   els.clearAll.addEventListener('click', ()=>{
     if(stateRef.calc.lines.length===0) return;
     if(confirm('Clear the current bill?')){
@@ -151,12 +153,8 @@ export function initCalculator(mountEl, state){
   });
   els.saveBill.addEventListener('click', async ()=>{
     if(stateRef.calc.lines.length===0){ alert('Nothing to save.'); return; }
-    const receipt = {
-      id: (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()),
-      ts: Date.now(),
-      lines: JSON.parse(JSON.stringify(stateRef.calc.lines)),
-      total: stateRef.calc.total
-    };
+    const receipt = { id: (crypto.randomUUID&&crypto.randomUUID())||String(Date.now()), ts: Date.now(),
+      lines: JSON.parse(JSON.stringify(stateRef.calc.lines)), total: stateRef.calc.total };
     const bills = (await dbGet(KEYS.bills)) || [];
     bills.unshift(receipt);
     await dbSet(KEYS.bills, bills.slice(0,20)).catch(()=>{});
