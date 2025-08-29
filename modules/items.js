@@ -7,10 +7,10 @@ const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
 const DEFAULT_WEIGHT = [50,100,500,1000];
 
-// ---------- Modal form scaffold (inputs themed) ----------
+// ---------- Modal form scaffold (theme-aware inputs) ----------
 function themedInputAttrs(){
   return 'style="border-radius:9px;border:1px solid rgba(255,255,255,.12);' +
-         'background:var(--field-bg, rgba(255,255,255,.05));color:inherit;padding:8px"';
+         'background:var(--field-bg, rgba(255,255,255,.05));color:var(--fg, inherit);padding:8px"';
 }
 function ensureItemForm(){
   const body = qs('#itemModalBody');
@@ -82,7 +82,7 @@ function showMultiplierPad(anchorBtn, baseValue, onApply){
   document.body.append(bd,pad); [4]
 }
 
-// ---------- Cards render (direct name click handler) ----------
+// ---------- Cards render (stable name click) ----------
 function renderCards(mountEl, state, ui){
   const q = (qs('#searchInput')?.value || '').trim().toLowerCase();
   const filtered = !q ? state.items : state.items.filter(it => {
@@ -111,9 +111,7 @@ function renderCards(mountEl, state, ui){
     head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:6px';
     head.innerHTML = `
       <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1">
-        <div class="names" data-open-item="${it.id}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer">
-          ${displayNameOf(it)}
-        </div>
+        <button type="button" class="names" data-open-item="${it.id}" style="all:unset;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayNameOf(it)}</button>
         <button class="small-btn" data-cycle="${it.id}" title="Toggle name">↻</button>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
@@ -121,8 +119,9 @@ function renderCards(mountEl, state, ui){
       </div>`;
     card.appendChild(head);
 
-    // DIRECT name click → open/close
-    head.querySelector('.names')?.addEventListener('click', ()=>{
+    // Name click: stop propagation and toggle safely
+    head.querySelector('.names')?.addEventListener('click', (e)=>{
+      e.stopPropagation();
       ui.openId = (ui.openId===it.id ? null : it.id);
       renderCards(mountEl, state, ui);
     }); [4]
@@ -158,7 +157,7 @@ function renderCards(mountEl, state, ui){
         <label style="display:flex;align-items:center;gap:6px">
           <span>₹</span>
           <input type="number" inputmode="decimal" min="0" step="0.01" data-price="${it.id}"
-                 style="width:120px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:var(--field-bg, rgba(255,255,255,.05));color:inherit;padding:6px 8px" />
+                 style="width:120px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:var(--field-bg, rgba(255,255,255,.05));color:var(--fg, inherit);padding:6px 8px" />
         </label>
         <div class="mini-mirror" style="margin-left:auto;font-weight:800">${formatMoney(0)}</div>
         <button class="small-btn" data-add-now="${it.id}" title="Add line">＋</button>
@@ -214,10 +213,10 @@ function renderCards(mountEl, state, ui){
             showMultiplierPad(addBtn, base, (mult)=>{ setMiniFromItems(base*mult); });
           }, LP_MS);
         }
-      }, {passive:true}); [7]
+      }, {passive:true}); [4]
       ['pointerup','pointercancel','pointerleave'].forEach(ev=>{
         addBtn.addEventListener(ev, ()=>{ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; } }, {passive:true});
-      }); [8]
+      }); [4]
 
       card.appendChild(dd);
     }
@@ -236,9 +235,9 @@ export async function initItems(mountEl, state){
     const existing = await dbGet(KEYS.items);
     if(Array.isArray(existing)) existing.forEach(it=>{ if(typeof it.showNameIdx!=='number') it.showNameIdx = 0; });
     if(Array.isArray(existing)) state.items = existing;
-  } catch {} [4]
+  } catch {} [8]
 
-  ensureItemForm(); [4]
+  ensureItemForm(); [5]
 
   const fab=qs('#fab'); const form=qs('#itemForm'); const title=qs('#itemModalTitle');
   const name1=qs('#name1'); const name2=qs('#name2'); const name3=qs('#name3');
@@ -273,7 +272,7 @@ export async function initItems(mountEl, state){
     else { const it=state.items.find(x=>x.id===editingId); if(it) Object.assign(it, payload, { showNameIdx: it.showNameIdx??0 }); }
     await dbSet(KEYS.items, state.items).catch(()=>{});
     closeModal('itemModal'); render();
-  } [4]
+  } [8]
   async function onDelete(){
     if(!editingId) return;
     const it=state.items.find(x=>x.id===editingId); if(!it) return;
@@ -282,13 +281,13 @@ export async function initItems(mountEl, state){
       await dbSet(KEYS.items, state.items).catch(()=>{});
       closeModal('itemModal'); render();
     }
-  } [4]
+  } [8]
 
   fab?.addEventListener('click', startAdd);
   form?.addEventListener('submit', onSubmit);
   delBtn?.addEventListener('click', onDelete); [4]
 
-  // Keep delegated handlers for edit/cycle, but name tap uses direct binding above
+  // Keep delegated handlers for edit/cycle; name tap is bound directly in render
   mountEl.addEventListener('click', async (e)=>{
     const edit=e.target.getAttribute('data-edit'); 
     if(edit){ startEdit(edit); return; }
