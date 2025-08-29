@@ -34,27 +34,27 @@ function ensureItemForm(){
       </div>
     </form>
   `;
-} [7]
+}
 
 /* ---------- Utilities ---------- */
-function openModal(id){ qs('#'+id)?.classList.add('open'); } [2]
-function closeModal(id){ qs('#'+id)?.classList.remove('open'); } [2]
-function gramsToPrice(sp, g){ return (Number(sp)||0) * (g/1000); } [2]
-function rupeeRound(x){ const n=Number(x)||0; const r=Math.floor(n); const p=Math.round((n-r)*100); return p>=90? r+1 : r; } [2]
+function openModal(id){ qs('#'+id)?.classList.add('open'); } /* direct element control via events */ [2]
+function closeModal(id){ qs('#'+id)?.classList.remove('open'); } /* direct element control via events */ [2]
+function gramsToPrice(sp, g){ return (Number(sp)||0) * (g/1000); } /* converter core */ [2]
+function rupeeRound(x){ const n=Number(x)||0; const r=Math.floor(n); const p=Math.round((n-r)*100); return p>=90? r+1 : r; } /* rounding */ [2]
 function normalizeGramEntry(entry){
   let val=entry;
   if(entry&&typeof entry==='object'){ val=('val'in entry)?entry.val:('value'in entry?entry.value:entry); }
   const grams=Math.max(0,parseFloat(val)||0);
   const label=grams===1000?'1kg':`${grams}g`;
   return { grams, label };
-} [2]
+} /* chip label */ [2]
 function displayNameOf(it){
   const idx=Number(it.showNameIdx||0)%3;
   const names=[it.name1||'', it.name2||'', it.name3||''];
   return names[idx] || it.name1 || it.name2 || it.name3 || '';
-} [2]
+} /* name cycle */ [2]
 
-/* ---------- Minimal decimal multiplier pad (opened on long‑press of ＋) ---------- */
+/* ---------- Minimal decimal multiplier pad (long‑press on ＋) ---------- */
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function showMultiplierPad(anchorBtn, baseValue, onApply){
   if(!baseValue || baseValue<=0) return;
@@ -93,7 +93,7 @@ function showMultiplierPad(anchorBtn, baseValue, onApply){
   function close(){ pad.remove(); bd.remove(); }
   function apply(){ const m=parseFloat(multStr)||0; if(m>0 && onApply) onApply(m); close(); }
 
-  bd.addEventListener('click', close); [2]
+  bd.addEventListener('click', close); /* dedicated listener */ [2]
   pad.addEventListener('click', (e)=>{
     const k=e.target.dataset.k; if(!k) return;
     if(k==='✕'){ close(); return; }
@@ -103,8 +103,8 @@ function showMultiplierPad(anchorBtn, baseValue, onApply){
     if(k==='OK'){ apply(); return; }
     const next = (k==='.' && multStr.includes('.')) ? multStr : (multStr==='1' && k!=='.' ? k : multStr + k);
     if(/^(\d+(\.\d{0,4})?)$/.test(next)){ multStr=next; pEl.textContent=`${baseValue} × ${multStr}`; }
-  }); [2]
-  document.body.append(bd,pad); [2]
+  }); /* pointer/key handling pattern */ [2][5]
+  document.body.append(bd,pad);
 }
 
 /* ---------- Renderer ---------- */
@@ -115,7 +115,7 @@ function renderCards(mountEl, state, ui){
   const filtered = q ? base.filter(it=>{
     const n1=(it.name1||'').toLowerCase(), n2=(it.name2||'').toLowerCase(), n3=(it.name3||'').toLowerCase();
     return n1.includes(q)||n2.includes(q)||n3.includes(q);
-  }) : base; [2]
+  }) : base; /* guarded filtering */ [2]
 
   mountEl.innerHTML = '';
   if (!filtered.length){
@@ -125,7 +125,7 @@ function renderCards(mountEl, state, ui){
     empty.textContent = q ? 'No matches.' : 'No items yet. Tap + to add.';
     mountEl.appendChild(empty);
     return;
-  } [2]
+  } /* safe empty state */ [2]
 
   const frag = document.createDocumentFragment();
 
@@ -134,12 +134,15 @@ function renderCards(mountEl, state, ui){
 
     const card=document.createElement('div'); card.className='card';
 
-    // Header row: one visible name + toggle + edit
+    // Header: visible name + caret toggle + name cycle + edit
     const head=document.createElement('div'); head.className='card-row';
     head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:6px';
     head.innerHTML = `
       <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1">
-        <button type="button" class="names" style="all:unset;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayNameOf(it)}</button>
+        <div class="names" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          ${displayNameOf(it)}
+        </div>
+        <button class="small-btn" data-toggle="${it.id}" title="Open/close">▾</button>
         <button class="small-btn" data-cycle="${it.id}" title="Toggle name">↻</button>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
@@ -147,14 +150,15 @@ function renderCards(mountEl, state, ui){
       </div>`;
     card.appendChild(head);
 
-    // Direct, isolated name click → toggle openId
-    head.querySelector('.names')?.addEventListener('click', (e)=>{
+    // Caret toggle only (no name click), prevents search/list wipeouts
+    head.querySelector('[data-toggle]')?.addEventListener('click', (e)=>{
       e.preventDefault(); e.stopPropagation();
-      ui.openId = (ui.openId===it.id ? null : it.id);
+      const id = e.currentTarget.getAttribute('data-toggle');
+      ui.openId = (ui.openId===id ? null : id);
       renderCards(mountEl, state, ui);
-    }); [2]
+    }); /* direct, isolated listener */ [2]
 
-    // Meta row
+    // Meta
     const meta=document.createElement('div'); meta.className='meta';
     meta.style.cssText='display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:2px';
     meta.innerHTML = `
@@ -167,7 +171,7 @@ function renderCards(mountEl, state, ui){
       const dd=document.createElement('div'); dd.className='dropdown';
       dd.style.cssText='margin-top:8px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);padding:8px';
 
-      // Preset chips (additive into mini)
+      // Preset chips (additive into shared mini)
       const chips=document.createElement('div'); chips.style.cssText='display:flex;gap:6px;overflow:auto;padding:2px 0';
       const sp=+it.sprice||0;
       const weights=(it.presets?.weight?.length? it.presets.weight : DEFAULT_WEIGHT);
@@ -177,12 +181,12 @@ function renderCards(mountEl, state, ui){
         const amount = rupeeRound(gramsToPrice(sp, grams));
         const b=document.createElement('button'); b.className='small-btn'; b.textContent=`${label}\n₹${amount}`;
         b.style.whiteSpace='pre';
-        b.addEventListener('click', ()=>{ addToMiniFromItems(amount); }); // accumulate [2]
+        b.addEventListener('click', ()=>{ addToMiniFromItems(amount); });
         chips.appendChild(b);
-      });
+      }); /* chip events */ [2]
       dd.appendChild(chips);
 
-      // Converter: ₹ only for now (grams field comes next step)
+      // Converter: ₹ field for now; grams comes in next step
       const conv=document.createElement('div'); conv.style.cssText='display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap';
       conv.innerHTML = `
         <label style="display:flex;align-items:center;gap:6px">
@@ -201,17 +205,17 @@ function renderCards(mountEl, state, ui){
       const addBtn = dd.querySelector('button[data-add-now]');
       const mirror = conv.querySelector('.mini-mirror');
 
-      // Live mini mirror and cached value for add
+      // Live mini mirror + cached mini value
       let lastMini = 0;
-      const off = onMiniChange(v => { lastMini = v; if(mirror) mirror.innerHTML = formatMoney(v); }); [2]
+      const off = onMiniChange(v => { lastMini = v; if(mirror) mirror.innerHTML = formatMoney(v); }); /* pub/sub mirror */ [2]
 
-      // ₹ input → mini
+      // ₹ → mini
       conv.addEventListener('input', ()=>{
         const p=parseFloat(priceInput?.value)||0;
         setMiniFromItems(p);
-      }); [2]
+      }); /* input listener */ [2]
 
-      // Buttons with priority rule: mini > typed ₹
+      // Buttons with priority: mini > typed
       dd.addEventListener('click', (e)=>{
         const addNow=e.target.getAttribute('data-add-now');
         const close=e.target.getAttribute('data-close');
@@ -238,9 +242,9 @@ function renderCards(mountEl, state, ui){
           ui.openId=null; renderCards(mountEl,state,ui);
           return;
         }
-      }); [2]
+      }); /* event delegation */ [2]
 
-      // Long‑press on dropdown ＋ → open small multiplier pad
+      // Long‑press on ＋ to open multiplier pad
       let lpTimer=null; const LP_MS=450;
       addBtn.addEventListener('pointerdown', ()=>{
         if(lpTimer) clearTimeout(lpTimer);
@@ -250,10 +254,10 @@ function renderCards(mountEl, state, ui){
             showMultiplierPad(addBtn, base, (mult)=>{ setMiniFromItems(base*mult); });
           }, LP_MS);
         }
-      }, {passive:true}); [2]
+      }, {passive:true}); /* pointerdown pattern */ [5]
       ['pointerup','pointercancel','pointerleave'].forEach(ev=>{
         addBtn.addEventListener(ev, ()=>{ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; } }, {passive:true});
-      }); [2]
+      }); /* cancel timers */ [2]
 
       card.appendChild(dd);
     }
@@ -271,9 +275,9 @@ export async function initItems(mountEl, state){
   try {
     const existing = await dbGet(KEYS.items);
     if(Array.isArray(existing)) state.items = existing;
-  } catch {} // IndexedDB read [2]
+  } catch {} /* IndexedDB read */ [2]
 
-  ensureItemForm(); // inject modal [7]
+  ensureItemForm(); /* inject modal */ [3]
 
   const fab=qs('#fab'); const form=qs('#itemForm'); const title=qs('#itemModalTitle');
   const name1=qs('#name1'); const name2=qs('#name2'); const name3=qs('#name3');
@@ -283,20 +287,20 @@ export async function initItems(mountEl, state){
   let editingId=null;
   const genId = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
 
-  function render(){ renderCards(mountEl,state,ui); } // rerender helper [2]
+  function render(){ renderCards(mountEl,state,ui); } /* local rerender helper */ [2]
 
   function startAdd(){
     editingId=null; title.textContent='Add item'; delBtn.style.display='none';
     name1.value=''; name2.value=''; name3.value=''; sprice.value=''; bprice.value='';
     openModal('itemModal'); setTimeout(()=>name1?.focus(),50);
-  } [2]
+  } /* add flow */ [2]
   function startEdit(id){
     const it=state.items.find(x=>x.id===id); if(!it) return;
     editingId=id; title.textContent='Edit item'; delBtn.style.display='inline-block';
     name1.value=it.name1||''; name2.value=it.name2||''; name3.value=it.name3||'';
     sprice.value=it.sprice||''; bprice.value=it.bprice||'';
     openModal('itemModal');
-  } [2]
+  } /* edit flow */ [2]
 
   async function onSubmit(e){
     e.preventDefault();
@@ -308,7 +312,7 @@ export async function initItems(mountEl, state){
     else { const it=state.items.find(x=>x.id===editingId); if(it) Object.assign(it, payload, { showNameIdx: it.showNameIdx??0 }); }
     await dbSet(KEYS.items, state.items).catch(()=>{});
     closeModal('itemModal'); render();
-  } [2]
+  } /* save to IDB */ [2]
   async function onDelete(){
     if(!editingId) return;
     const it=state.items.find(x=>x.id===editingId); if(!it) return;
@@ -317,13 +321,13 @@ export async function initItems(mountEl, state){
       await dbSet(KEYS.items, state.items).catch(()=>{});
       closeModal('itemModal'); render();
     }
-  } [2]
+  } /* delete from IDB */ [2]
 
   fab?.addEventListener('click', startAdd);
   form?.addEventListener('submit', onSubmit);
-  delBtn?.addEventListener('click', onDelete); [2]
+  delBtn?.addEventListener('click', onDelete); /* direct handlers */ [2]
 
-  // Delegated handlers for edit/cycle; name tap is bound directly per card
+  // Delegated handlers for edit/cycle only (caret toggle is bound directly per card)
   mountEl.addEventListener('click', async (e)=>{
     const edit=e.target.getAttribute('data-edit'); 
     if(edit){ startEdit(edit); return; }
@@ -337,9 +341,9 @@ export async function initItems(mountEl, state){
       }
       return;
     }
-  }); [2]
+  }); /* safe delegation */ [2]
 
-  qs('#searchInput')?.addEventListener('input', render); [2]
+  qs('#searchInput')?.addEventListener('input', render); /* live search */ [2]
 
   render();
 }
