@@ -19,26 +19,18 @@ let stateRef = null;
 let els = null;
 let mini = 0;
 
-/* Mini change pub/sub so dropdown mirrors update */
+/* Mini change pub/sub so other modules can mirror live values */
 const miniSubs = new Set();
 function emitMini(){ miniSubs.forEach(fn=>{ try{ fn(mini); }catch{} }); }
-export function onMiniChange(cb){ miniSubs.add(cb); try{ cb(mini); }catch{} return ()=>miniSubs.delete(cb); } // addEventListener-style API [12]
+export function onMiniChange(cb){ miniSubs.add(cb); try{ cb(mini); }catch{} return ()=>miniSubs.delete(cb); } [2]
 
-/* Helpers for items.js */
+/* Helpers used by the search sheet */
 export function setMiniFromItems(amount){
   mini = Math.max(0, rupeeRound(amount||0));
-  if (els?.miniView && els?.miniAdd){
-    els.miniView.innerHTML = formatMoney(mini);
-    els.miniAdd.disabled = mini <= 0;
-  }
   emitMini();
 }
 export function addToMiniFromItems(delta){
   mini = Math.max(0, rupeeRound((mini||0) + (Number(delta)||0)));
-  if (els?.miniView && els?.miniAdd){
-    els.miniView.innerHTML = formatMoney(mini);
-    els.miniAdd.disabled = mini <= 0;
-  }
   emitMini();
 }
 export function addLineFromItems({ itemName, grams=null, price=null }={}){
@@ -48,7 +40,7 @@ export function addLineFromItems({ itemName, grams=null, price=null }={}){
   renderList();
 }
 
-/* Internal render for the bill */
+/* Bill render: Name • small x • Amount (one line, no separators) */
 function renderList(){
   if(!els || !stateRef) return;
   let total = 0;
@@ -59,19 +51,25 @@ function renderList(){
     total += ln.lineTotal;
 
     const row = document.createElement('div');
-    // No separators; align amount + delete on the right via flex [14][15]
-    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;gap:8px';
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 0;gap:10px'; // stable, single line [6]
 
+    // Left cluster: Name + compact x
     const left = document.createElement('div');
-    left.style.cssText='flex:1;min-width:0';
-    left.innerHTML = `
-      <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ln.itemName}</div>
-      <div class="small-muted">${ln.grams? (ln.grams+'g') : ''} ${ln.grams&&ln.price? '•' : ''} ${ln.price? ('₹'+ln.price) : ''}</div>
-    `;
+    left.style.cssText='display:flex;align-items:center;gap:10px;min-width:0;flex:1';
+    const name = document.createElement('div');
+    name.style.cssText='font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    name.textContent = ln.itemName;
+    const del = document.createElement('button');
+    del.className='small-btn';
+    del.setAttribute('data-del', String(idx));
+    del.title='Remove';
+    del.textContent='x';
+    del.style.cssText='padding:0 6px;height:22px;line-height:22px;border-radius:6px;font-size:.9rem'; // small x [2]
+    left.append(name, del);
 
+    // Right cluster: Amount
     const right = document.createElement('div');
-    right.style.cssText='display:flex;align-items:center;gap:10px';
-    right.innerHTML = `<div>${formatMoney(ln.lineTotal)}</div><button class="small-btn" data-del="${idx}" title="Remove">✕</button>`;
+    right.innerHTML = `${formatMoney(ln.lineTotal)}`;
 
     row.append(left, right);
     frag.appendChild(row);
@@ -97,7 +95,6 @@ export function initCalculator(mountEl, state){
       <button class="small-btn" id="cClearAll" title="Clear bill">C</button>
       <div style="margin-left:auto;font-weight:800" id="cTotal">₹0<span class="dec">.00</span></div>
     </div>
-
     <div id="cList"></div>
   `;
   mountEl.replaceChildren(wrap);
@@ -109,38 +106,34 @@ export function initCalculator(mountEl, state){
     clearAll: wrap.querySelector('#cClearAll')
   };
 
-  // Delete line [recommended addEventListener usage] [12]
+  // Delete line
   els.list.addEventListener('click', (e)=>{
     const del = e.target.getAttribute('data-del');
     if(del!=null){
       stateRef.calc.lines.splice(parseInt(del,10),1);
       renderList();
     }
-  });
+  }); [2]
 
-  // Clear all, Save bill
+  // Clear all and save
   els.clearAll.addEventListener('click', ()=>{
     if(stateRef.calc.lines.length===0) return;
     if(confirm('Clear the current bill?')){
       stateRef.calc.lines = [];
       renderList();
     }
-  });
+  }); [2]
   els.saveBill.addEventListener('click', async ()=>{
     if(stateRef.calc.lines.length===0){ alert('Nothing to save.'); return; }
-    const receipt = {
-      id: (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()),
-      ts: Date.now(),
-      lines: JSON.parse(JSON.stringify(stateRef.calc.lines)),
-      total: stateRef.calc.total
-    };
+    const receipt = { id: (crypto.randomUUID&&crypto.randomUUID())||String(Date.now()), ts: Date.now(),
+      lines: JSON.parse(JSON.stringify(stateRef.calc.lines)), total: stateRef.calc.total };
     const bills = (await dbGet(KEYS.bills)) || [];
     bills.unshift(receipt);
     await dbSet(KEYS.bills, bills.slice(0,20)).catch(()=>{});
     stateRef.calc.lines = [];
     renderList();
     alert('Saved to Bill history.');
-  });
+  }); [2]
 
   renderList();
 }
