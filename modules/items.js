@@ -1,14 +1,12 @@
 // modules/items.js
 import { get as dbGet, set as dbSet, KEYS } from './storage.js';
-import { setMiniFromItems, addLineFromItems } from './calculator.js';
+import { setMiniFromItems, addToMiniFromItems, addLineFromItems } from './calculator.js';
 
 const qs  = (s, r=document) => r.querySelector(s);
 const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
-// Defaults
 const DEFAULT_WEIGHT = [50,100,500,1000];
 
-// Modal form
 function ensureItemForm(){
   const body = qs('#itemModalBody');
   if (!body || body.dataset.wired==='1') return;
@@ -31,7 +29,6 @@ function ensureItemForm(){
   `;
 }
 
-// Basic modal helpers
 function openModal(id){ qs('#'+id)?.classList.add('open'); }
 function closeModal(id){ qs('#'+id)?.classList.remove('open'); }
 
@@ -60,7 +57,7 @@ function renderCards(mountEl, state, ui){
   items.forEach((it)=>{
     const card=document.createElement('div'); card.className='card';
 
-    // Header row: name is the toggle target
+    // Header: tapping the name toggles dropdown
     const head=document.createElement('div'); head.className='card-row';
     head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:6px';
     head.innerHTML = `
@@ -80,25 +77,26 @@ function renderCards(mountEl, state, ui){
       <div class="buy"  style="font-size:.5rem;opacity:.75">₹${(+it.bprice||0).toFixed(2)}/kg</div>`;
     card.appendChild(meta);
 
-    // Dropdown under the card if open
+    // Dropdown
     if(ui.openId===it.id){
       const dd=document.createElement('div'); dd.className='dropdown';
       dd.style.cssText='margin-top:8px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);padding:8px';
 
-      // Chips row (weight → ₹)
+      // Chips row: every tap adds into mini
       const chips=document.createElement('div'); chips.style.cssText='display:flex;gap:6px;overflow:auto;padding:2px 0';
       const sp=+it.sprice||0;
       (it.presets?.weight?.length? it.presets.weight : DEFAULT_WEIGHT).forEach(g=>{
         const grams = typeof g==='number'? g : (+g||0);
+        const label = grams===1000 ? '1kg' : `${grams}g`;
         const amount = rupeeRound(gramsToPrice(sp, grams));
-        const b=document.createElement('button'); b.className='small-btn'; b.textContent=`${grams}g\n₹${amount}`;
+        const b=document.createElement('button'); b.className='small-btn'; b.textContent=`${label}\n₹${amount}`;
         b.style.whiteSpace='pre';
-        b.addEventListener('click', ()=>{ setMiniFromItems(amount); });
+        b.addEventListener('click', ()=>{ addToMiniFromItems(amount); }); // accumulate
         chips.appendChild(b);
       });
       dd.appendChild(chips);
 
-      // Converter row (₹ only, minimal)
+      // Converter
       const conv=document.createElement('div'); conv.style.cssText='display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap';
       conv.innerHTML = `
         <label style="display:flex;align-items:center;gap:6px">
@@ -124,8 +122,7 @@ function renderCards(mountEl, state, ui){
           const amt=rupeeRound(p);
           if(amt>0){
             addLineFromItems({ itemName:`${it.name1} / ${it.name2} / ${it.name3}`, grams:null, price:amt });
-            priceInput.value='';
-            setMiniFromItems(0);
+            priceInput.value=''; setMiniFromItems(0);
           }
         }
         if(close){ ui.openId=null; renderCards(mountEl,state,ui); }
@@ -143,19 +140,14 @@ function renderCards(mountEl, state, ui){
 export async function initItems(mountEl, state){
   if(!mountEl) return;
 
-  // Load items
   try { const existing = await dbGet(KEYS.items); if(Array.isArray(existing)) state.items = existing; } catch {}
   ensureItemForm();
 
-  // Elements
   const fab=qs('#fab'); const form=qs('#itemForm'); const title=qs('#itemModalTitle');
   const name1=qs('#name1'); const name2=qs('#name2'); const name3=qs('#name3');
   const sprice=qs('#sprice'); const bprice=qs('#bprice'); const delBtn=qs('#itemDeleteBtn');
 
-  // UI drop state
   const ui = { openId:null };
-
-  // Editing state
   let editingId=null;
   const genId = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
 
@@ -195,17 +187,13 @@ export async function initItems(mountEl, state){
     }
   }
 
-  // Events
   fab?.addEventListener('click', startAdd);
   form?.addEventListener('submit', onSubmit);
   delBtn?.addEventListener('click', onDelete);
 
   mountEl.addEventListener('click', (e)=>{
-    // Edit pencil
     const edit=e.target.getAttribute('data-edit'); 
     if(edit){ startEdit(edit); return; }
-
-    // Toggle dropdown by tapping the name area
     const openEl = e.target.closest('[data-open-item]');
     if(openEl){
       const id = openEl.getAttribute('data-open-item');
