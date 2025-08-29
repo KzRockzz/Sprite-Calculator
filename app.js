@@ -1,12 +1,12 @@
-// app.js (ES module) — Calculator + Items wired
+// app.js — Calculator + Items + History wired
 import { get as dbGet, set as dbSet, KEYS } from './modules/storage.js';
 import { initCalculator } from './modules/calculator.js';
 import { initItems } from './modules/items.js';
+import { initHistory } from './modules/history.js';
 
 const qs  = (s, r=document) => r.querySelector(s);
-const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
-// ---------- State kept in IndexedDB [5]
+// ---------- State kept in IndexedDB
 const state = {
   items: [],
   recentSearches: [],
@@ -38,7 +38,7 @@ function applySettings() {
   document.documentElement.style.setProperty('--accent', state.settings.accent);
 }
 
-// ---------- Generic modal wiring via data-open/data-close [4]
+// ---------- Generic modal wiring
 document.addEventListener('click', (e)=>{
   const openId = e.target.getAttribute('data-open');
   if (openId) { qs(`#${openId}`)?.classList.add('open'); }
@@ -50,7 +50,7 @@ document.addEventListener('click', (e)=>{
   }
 });
 
-// ---------- Keyboard lift for mobile [4]
+// ---------- Keyboard lift
 (function keyboardLift(){
   function setKb(px){ document.documentElement.style.setProperty('--kb', Math.max(0, px) + 'px'); }
   if ('virtualKeyboard' in navigator) {
@@ -67,7 +67,7 @@ document.addEventListener('click', (e)=>{
   }
 })();
 
-// ---------- Load persisted state then mount modules [5]
+// ---------- Load persisted state then mount modules
 async function loadAll() {
   try {
     const [items, rSearch, rItems, calc, bills, settings, theme] = await Promise.all([
@@ -87,11 +87,12 @@ async function loadAll() {
   applySettings();
 
   // Mount base UI
-  initCalculator(document.getElementById('calcMount'), state);  // calculator first [6]
-  initItems(document.getElementById('listMount'), state);       // items list + FAB modal [6]
+  initCalculator(document.getElementById('calcMount'), state);
+  initItems(document.getElementById('listMount'), state);
+  initHistory(state);
 }
 
-// ---------- Service worker register; reload twice to activate updates [3]
+// ---------- Service worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
