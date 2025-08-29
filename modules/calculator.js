@@ -8,7 +8,7 @@ function rupeeRound(x){
   const p = Math.round((n - r) * 100);
   return p >= 90 ? r + 1 : r;
 }
-function fmtMain(n){
+export function formatMoney(n){
   const v = (Number(n)||0).toFixed(2);
   const [a,b] = v.split('.');
   return `₹${a}<span class="dec">.${b}</span>`;
@@ -19,20 +19,27 @@ let stateRef = null;
 let els = null;
 let mini = 0;
 
-/* Public helpers for other modules (used by items.js) */
+/* Mini change subscribers for dropdown mirrors */
+const miniSubs = new Set();
+function emitMini(){ miniSubs.forEach(fn=>{ try{ fn(mini); }catch{} }); }
+export function onMiniChange(cb){ miniSubs.add(cb); try{ cb(mini); }catch{} return ()=>miniSubs.delete(cb); }
+
+/* Public helpers used by items.js */
 export function setMiniFromItems(amount){
   mini = Math.max(0, rupeeRound(amount||0));
   if (els?.miniView && els?.miniAdd){
-    els.miniView.innerHTML = fmtMain(mini);
+    els.miniView.innerHTML = formatMoney(mini);
     els.miniAdd.disabled = mini <= 0;
   }
+  emitMini();
 }
 export function addToMiniFromItems(delta){
   mini = Math.max(0, rupeeRound((mini||0) + (Number(delta)||0)));
   if (els?.miniView && els?.miniAdd){
-    els.miniView.innerHTML = fmtMain(mini);
+    els.miniView.innerHTML = formatMoney(mini);
     els.miniAdd.disabled = mini <= 0;
   }
+  emitMini();
 }
 export function addLineFromItems({ itemName, grams=null, price=null }={}){
   if(!stateRef) return;
@@ -58,23 +65,23 @@ function renderList(){
     left.innerHTML = `
       <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ln.itemName}</div>
       <div class="small-muted">${ln.grams? (ln.grams+'g') : ''} ${ln.grams&&ln.price? '•' : ''} ${ln.price? ('₹'+ln.price) : ''}</div>
-    `;
+    `; /* innerHTML updates the DOM subtree; safe here with known strings. [2] */
 
     const right = document.createElement('div');
     right.style.cssText='display:flex;align-items:center;gap:8px';
-    right.innerHTML = `<div>${fmtMain(ln.lineTotal)}</div><button class="small-btn" data-del="${idx}">✕</button>`;
+    right.innerHTML = `<div>${formatMoney(ln.lineTotal)}</div><button class="small-btn" data-del="${idx}">✕</button>`;
 
-    row.append(left, right);
+    row.append(left, right); /* createElement/appendChild pattern. [12] */
     frag.appendChild(row);
   });
 
   stateRef.calc.total = total;
   els.list.appendChild(frag);
-  els.total.innerHTML = fmtMain(total);
+  els.total.innerHTML = formatMoney(total);
   dbSet(KEYS.calc, stateRef.calc).catch(()=>{});
 }
 
-/* Long‑press keypad */
+/* Long‑press keypad for main ＋ */
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function showMultiplierPad(anchorBtn, baseValue){
   if(!baseValue || baseValue<=0) return;
@@ -95,7 +102,7 @@ function showMultiplierPad(anchorBtn, baseValue){
 
   const grid = document.createElement('div');
   grid.style.cssText='display:grid; grid-template-columns:repeat(3,1fr); gap:6px';
-  const keys = ['1','2','3','4','5','6','7','8','9','0','C','10']; // 3x4
+  const keys = ['1','2','3','4','5','6','7','8','9','0','C','10'];
   keys.forEach(k=>{
     const b=document.createElement('button');
     b.className='small-btn';
@@ -106,8 +113,7 @@ function showMultiplierPad(anchorBtn, baseValue){
   });
   pad.appendChild(grid);
 
-  // Position near the ＋ button
-  const r = anchorBtn.getBoundingClientRect();
+  const r = anchorBtn.getBoundingClientRect(); /* geometry for placement. [17] */
   const W=180, H=180;
   let top = r.bottom + 8;
   let left = r.left - (W - r.width);
@@ -127,8 +133,9 @@ function showMultiplierPad(anchorBtn, baseValue){
     const mul = parseInt(k,10);
     if(!isNaN(mul) && mul>=0){
       mini = Math.max(0, rupeeRound((parseFloat(baseValue)||0) * mul));
-      els.miniView.innerHTML = fmtMain(mini);
+      els.miniView.innerHTML = formatMoney(mini);
       els.miniAdd.disabled = mini<=0;
+      emitMini();
       close();
     }
   });
@@ -174,30 +181,35 @@ export function initCalculator(mountEl, state){
     miniAdd: wrap.querySelector('#cMiniAdd'),
     miniClear: wrap.querySelector('#cMiniClear'),
     saveBill: wrap.querySelector('#cSaveBill'),
-    clearAll: wrap.querySelector('#cClearAll')
+    clearAll: wrap.querySelector('#cClearAll'),
+    miniRow: wrap.querySelector('#cMini')
   };
 
+  // Hide the top mini row; dropdowns will mirror it
+  if (els.miniRow) els.miniRow.style.display = 'none'; /* layout change via style; the logic remains. [2] */
+
   function updateMiniView(){
-    els.miniView.innerHTML = fmtMain(mini);
+    els.miniView.innerHTML = formatMoney(mini);
+    emitMini();
     els.miniAdd.disabled = mini <= 0;
   }
 
-  // Input -> mini
+  // Input -> mini (still works, just hidden)
   els.miniPrice.addEventListener('input', ()=>{
     const raw = parseFloat(els.miniPrice.value)||0;
     mini = rupeeRound(raw);
     updateMiniView();
-  }); // input binding [2]
+  }); /* input event wiring. [14] */
 
   // Short tap: add to bill, then clear
   els.miniAdd.addEventListener('click', ()=>{
-    if(els.miniAdd.dataset.lp === '1'){ delete els.miniAdd.dataset.lp; return; } // ignore click after long press
+    if(els.miniAdd.dataset.lp === '1'){ delete els.miniAdd.dataset.lp; return; }
     if(mini<=0) return;
     stateRef.calc.lines.push({ itemName:'Manual', grams:null, price:mini, lineTotal:rupeeRound(mini) });
     els.miniPrice.value=''; mini=0; updateMiniView(); renderList();
-  }); // click handler [2]
+  }); /* click handler. [14] */
 
-  // Long‑press on ＋ to open keypad
+  // Long‑press on ＋ → keypad
   let lpTimer = null;
   const LP_MS = 450;
   els.miniAdd.addEventListener('pointerdown', ()=>{
@@ -209,42 +221,31 @@ export function initCalculator(mountEl, state){
         showMultiplierPad(els.miniAdd, base);
       }, LP_MS);
     }
-  }, {passive:true}); // pointerdown [3]
+  }, {passive:true}); /* pointerdown for long press. [15] */
   ['pointerup','pointercancel','pointerleave'].forEach(ev=>{
     els.miniAdd.addEventListener(ev, ()=>{
       if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
-    }, {passive:true}); // cancel timer on end/cancel [6]
-  });
+    }, {passive:true});
+  }); /* cancel timer on end/cancel. [16] */
 
-  els.miniClear.addEventListener('click', ()=>{
-    els.miniPrice.value=''; mini=0; updateMiniView();
-  });
+  els.miniClear.addEventListener('click', ()=>{ els.miniPrice.value=''; mini=0; updateMiniView(); });
 
   els.list.addEventListener('click', (e)=>{
     const del = e.target.getAttribute('data-del');
-    if(del!=null){
-      stateRef.calc.lines.splice(parseInt(del,10),1);
-      renderList();
-    }
+    if(del!=null){ stateRef.calc.lines.splice(parseInt(del,10),1); renderList(); }
   });
 
   els.clearAll.addEventListener('click', ()=>{
     if(stateRef.calc.lines.length===0) return;
-    if(confirm('Clear the current bill?')){
-      stateRef.calc.lines = [];
-      renderList();
-    }
+    if(confirm('Clear the current bill?')){ stateRef.calc.lines = []; renderList(); }
   });
   els.saveBill.addEventListener('click', async ()=>{
     if(stateRef.calc.lines.length===0){ alert('Nothing to save.'); return; }
     const receipt = { id: (crypto.randomUUID&&crypto.randomUUID())||String(Date.now()), ts: Date.now(),
       lines: JSON.parse(JSON.stringify(stateRef.calc.lines)), total: stateRef.calc.total };
     const bills = (await dbGet(KEYS.bills)) || [];
-    bills.unshift(receipt);
-    await dbSet(KEYS.bills, bills.slice(0,20)).catch(()=>{});
-    stateRef.calc.lines = [];
-    renderList();
-    alert('Saved to Bill history.');
+    bills.unshift(receipt); await dbSet(KEYS.bills, bills.slice(0,20)).catch(()=>{});
+    stateRef.calc.lines = []; renderList(); alert('Saved to Bill history.');
   });
 
   renderList();
