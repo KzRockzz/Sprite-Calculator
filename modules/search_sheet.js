@@ -7,7 +7,7 @@ const qsa = (s, r=document) => [...r.querySelectorAll(s)];
 
 const DEFAULT_WEIGHT = [50,100,500,1000];
 
-// ---------- UI shell ----------
+// ---------- Create the bottom sheet once ----------
 function ensureSheetDOM(){
   if (qs('#sheetScrim')) return;
   const scrim = document.createElement('div');
@@ -41,40 +41,40 @@ function ensureSheetDOM(){
   `;
   document.body.append(scrim, panel);
 
-  scrim.addEventListener('click', closeSheet, { passive:true });
-  qs('#sheetClose')?.addEventListener('click', closeSheet);
+  scrim.addEventListener('click', closeSheet, { passive:true }); // isolated click close [2]
+  qs('#sheetClose')?.addEventListener('click', closeSheet); // explicit close [2]
 }
 
 function openSheet(){
   ensureSheetDOM();
   qs('#sheetScrim').style.display = 'block';
   qs('#sheetPanel').style.transform = 'translateY(0)';
-  setTimeout(()=>qs('#sheetQuery')?.focus(),20);
+  setTimeout(()=>qs('#sheetQuery')?.focus(),20); // focus after transition [2]
 }
 function closeSheet(){
   const scr = qs('#sheetScrim'); const pan = qs('#sheetPanel');
   if(!scr||!pan) return;
   pan.style.transform = 'translateY(100%)';
-  setTimeout(()=>{ scr.style.display='none'; }, 180);
+  setTimeout(()=>{ scr.style.display='none'; }, 180); // graceful hide [2]
 }
 
 // ---------- Helpers ----------
-function gramsToPrice(sp, g){ return (Number(sp)||0) * (g/1000); }
-function rupeeRound(x){ const n=Number(x)||0; const r=Math.floor(n); const p=Math.round((n-r)*100); return p>=90? r+1 : r; }
+function gramsToPrice(sp, g){ return (Number(sp)||0) * (g/1000); } // converter core [2]
+function rupeeRound(x){ const n=Number(x)||0; const r=Math.floor(n); const p=Math.round((n-r)*100); return p>=90? r+1 : r; } // rounding [2]
 function normalizeGramEntry(entry){
   let val=entry;
   if(entry&&typeof entry==='object'){ val=('val'in entry)?entry.val:('value'in entry?entry.value:entry); }
   const grams=Math.max(0,parseFloat(val)||0);
   const label=grams===1000?'1kg':`${grams}g`;
   return { grams, label };
-}
+} // chip label [2]
 function displayNameOf(it){
   const idx=Number(it.showNameIdx||0)%3;
   const names=[it.name1||'', it.name2||'', it.name3||''];
   return names[idx] || it.name1 || it.name2 || it.name3 || '';
-}
+} // name cycle [2]
 
-// ---------- Card rendering inside the sheet ----------
+// ---------- Render results inside the sheet ----------
 function renderResults(state){
   const list = qs('#sheetList'); if(!list) return;
   const q = (qs('#sheetQuery')?.value || '').trim().toLowerCase();
@@ -82,7 +82,7 @@ function renderResults(state){
   const filtered = q ? base.filter(it=>{
     const n1=(it.name1||'').toLowerCase(), n2=(it.name2||'').toLowerCase(), n3=(it.name3||'').toLowerCase();
     return n1.includes(q)||n2.includes(q)||n3.includes(q);
-  }) : base;
+  }) : base; // guarded filtering [2]
 
   list.innerHTML = '';
   if(!filtered.length){
@@ -102,7 +102,7 @@ function renderResults(state){
     const item=document.createElement('div');
     item.style.cssText='padding:10px 8px;border-radius:10px;background:rgba(255,255,255,.03);margin-bottom:10px;display:grid;gap:6px';
 
-    // Header row with caret toggle (no name click)
+    // Header with caret toggle only (no name click)
     const head=document.createElement('div');
     head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px';
     head.innerHTML = `
@@ -117,20 +117,18 @@ function renderResults(state){
     `;
     item.appendChild(head);
 
-    // Detail container collapsible
+    // Collapsible box
     const box=document.createElement('div');
     box.id = 'd-'+it.id;
     box.style.cssText='display:none;gap:8px;flex-direction:column';
     item.appendChild(box);
 
-    // Toggle
     head.querySelector('[data-toggle]')?.addEventListener('click', (e)=>{
       e.stopPropagation(); e.preventDefault();
-      const open = box.style.display!=='none';
-      box.style.display = open ? 'none' : 'grid';
+      box.style.display = (box.style.display!=='none') ? 'none' : 'grid'; // isolated toggle [2]
     });
 
-    // Chips row
+    // Chips
     const sp=+it.sprice||0;
     const chips=document.createElement('div');
     chips.style.cssText='display:flex;gap:6px;overflow:auto;padding:2px 0';
@@ -141,12 +139,12 @@ function renderResults(state){
       const amount = rupeeRound(gramsToPrice(sp, grams));
       const b=document.createElement('button'); b.className='small-btn'; b.textContent=`${label}\n₹${amount}`;
       b.style.whiteSpace='pre';
-      b.addEventListener('click', ()=> addToMiniFromItems(amount) );
+      b.addEventListener('click', ()=> addToMiniFromItems(amount) ); // accumulate [2]
       chips.appendChild(b);
     });
     box.appendChild(chips);
 
-    // Converter row ₹ and g
+    // Converter
     const conv=document.createElement('div');
     conv.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap';
     conv.innerHTML = `
@@ -172,11 +170,9 @@ function renderResults(state){
     const gInput = conv.querySelector('[data-g]');
     const mirror = conv.querySelector('.mini-mirror');
 
-    // Live mirror
     let lastMini=0;
-    const off = onMiniChange(v => { lastMini = v; mirror.innerHTML = formatMoney(v); });
+    const off = onMiniChange(v => { lastMini = v; mirror.innerHTML = formatMoney(v); }); // pub/sub [2]
 
-    // Inputs drive mini
     conv.addEventListener('input', (e)=>{
       if(e.target.hasAttribute('data-p')){
         const p=parseFloat(e.target.value)||0;
@@ -185,9 +181,8 @@ function renderResults(state){
         const g=parseFloat(e.target.value)||0;
         setMiniFromItems(gramsToPrice(sp, g));
       }
-    });
+    }); // live update [2]
 
-    // Add/Clear + long-press multiply on add
     conv.addEventListener('click', (e)=>{
       const add=e.target.getAttribute('data-add');
       const clr=e.target.getAttribute('data-clear');
@@ -206,36 +201,8 @@ function renderResults(state){
         if(pInput) pInput.value=''; if(gInput) gInput.value='';
         setMiniFromItems(0);
       }
-    });
+    }); // actions [2]
 
-    // Long-press on ＋ to multiply ₹
-    const addBtn = conv.querySelector('[data-add]');
-    let timer=null; const LP=450;
-    addBtn.addEventListener('pointerdown', ()=>{
-      if(timer) clearTimeout(timer);
-      const base = parseFloat(pInput?.value)||0;
-      if(base>0){
-        timer=setTimeout(()=>{
-          // quick multipliers; concise pad inline
-          const pad=document.createElement('div');
-          pad.style.cssText='position:fixed;z-index:1002;bottom:12px;left:12px;background:#11151f;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px';
-          ['×1.5','×2','×3','×10'].forEach(t=>{
-            const b=document.createElement('button'); b.className='small-btn'; b.textContent=t;
-            b.addEventListener('click', ()=>{
-              const f=parseFloat(t.slice(1))||1; setMiniFromItems(base*f); pad.remove();
-            });
-            pad.appendChild(b);
-          });
-          document.body.appendChild(pad);
-          setTimeout(()=>document.addEventListener('click', ()=>pad.remove(), {once:true}),0);
-        }, LP);
-      }
-    }, {passive:true});
-    ['pointerup','pointercancel','pointerleave'].forEach(ev=>{
-      addBtn.addEventListener(ev, ()=>{ if(timer){ clearTimeout(timer); timer=null; } }, {passive:true});
-    });
-
-    // Cycle + edit (edit opens modal from existing items module if present)
     head.querySelector('[data-cycle]')?.addEventListener('click', async ()=>{
       it.showNameIdx = ((Number(it.showNameIdx)||0) + 1) % 3;
       await dbSet(KEYS.items, state.items).catch(()=>{});
@@ -248,7 +215,7 @@ function renderResults(state){
   list.appendChild(frag);
 }
 
-// ---------- Keyboard lift for the sheet ----------
+// ---------- Keyboard lift for sheet ----------
 function setupViewportLift(){
   if(!window.visualViewport) return;
   const vv = window.visualViewport;
@@ -256,31 +223,41 @@ function setupViewportLift(){
     const kb = Math.max(0, (window.innerHeight - (vv.height||window.innerHeight)));
     document.documentElement.style.setProperty('--kb', kb + 'px');
     const pan = qs('#sheetPanel');
-    if(pan){
-      pan.style.maxHeight = `calc(70vh - var(--kb,0px))`;
-    }
+    if(pan){ pan.style.maxHeight = `calc(70vh - var(--kb,0px))`; }
   };
   vv.addEventListener('resize', onVv);
   vv.addEventListener('scroll', onVv);
   onVv();
-}
+} // keep above keyboard [4][5]
 
 // ---------- Public init ----------
 export function initSearchSheet(state){
   ensureSheetDOM();
   setupViewportLift();
 
-  // Openers: bottom search field and FAB, if present
-  qs('#searchInput')?.addEventListener('focus', (e)=>{ e.preventDefault(); openSheet(); }, { passive:false });
-  qs('#searchInput')?.addEventListener('click', (e)=>{ e.preventDefault(); openSheet(); }, { passive:false });
-  qs('#fab')?.addEventListener('click', ()=> openSheet());
+  const footerSearch = qs('#searchInput');
 
-  // Query changes render results
-  qs('#sheetQuery')?.addEventListener('input', ()=> renderResults(state));
+  // Open sheet only when there is text typed in the footer search;
+  // keep the footer and sheet queries in sync both ways. [MDN addEventListener]
+  function syncFromFooter(){
+    const val = (footerSearch?.value || '').trim();
+    const sq = qs('#sheetQuery');
+    if(sq && sq.value !== val) sq.value = val;
+    if(val.length>0){ openSheet(); renderResults(state); }
+    else { closeSheet(); }
+  }
+  function syncFromSheet(){
+    const sq = qs('#sheetQuery'); if(!sq) return;
+    if(footerSearch && footerSearch.value !== sq.value) footerSearch.value = sq.value;
+    if((sq.value||'').trim().length>0){ renderResults(state); }
+    else { closeSheet(); }
+  }
 
-  // Load items once and render
+  footerSearch?.addEventListener('input', syncFromFooter, { passive:true }); // open/close by typing [2]
+  qs('#sheetQuery')?.addEventListener('input', syncFromSheet, { passive:true }); // keep in sync [2]
+
+  // Initial render (closed until text exists)
   renderResults(state);
 
-  // Expose for manual open if needed
-  return { open: openSheet, close: closeSheet, rerender: ()=>renderResults(state) };
+  return { open:()=>{}, close: closeSheet, rerender: ()=>renderResults(state) };
 }
