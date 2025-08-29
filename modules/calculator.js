@@ -1,14 +1,14 @@
 // modules/calculator.js
 import { get as dbGet, set as dbSet, KEYS } from './storage.js';
 
-/* FP‑safe rounding + display */
+/* Rounding + display */
 function rupeeRound(x){
   const n = Number(x) || 0;
   const r = Math.floor(n);
   const p = Math.round((n - r) * 100);
   return p >= 90 ? r + 1 : r;
 }
-function fmtMain(n){
+export function formatMoney(n){
   const v = (Number(n)||0).toFixed(2);
   const [a,b] = v.split('.');
   return `₹${a}<span class="dec">.${b}</span>`;
@@ -19,20 +19,27 @@ let stateRef = null;
 let els = null;
 let mini = 0;
 
-/* Public helpers for other modules */
+/* Mini change pub/sub so dropdown mirrors update */
+const miniSubs = new Set();
+function emitMini(){ miniSubs.forEach(fn=>{ try{ fn(mini); }catch{} }); }
+export function onMiniChange(cb){ miniSubs.add(cb); try{ cb(mini); }catch{} return ()=>miniSubs.delete(cb); } // addEventListener-style API [12]
+
+/* Helpers for items.js */
 export function setMiniFromItems(amount){
   mini = Math.max(0, rupeeRound(amount||0));
   if (els?.miniView && els?.miniAdd){
-    els.miniView.innerHTML = fmtMain(mini);
+    els.miniView.innerHTML = formatMoney(mini);
     els.miniAdd.disabled = mini <= 0;
   }
+  emitMini();
 }
 export function addToMiniFromItems(delta){
   mini = Math.max(0, rupeeRound((mini||0) + (Number(delta)||0)));
   if (els?.miniView && els?.miniAdd){
-    els.miniView.innerHTML = fmtMain(mini);
+    els.miniView.innerHTML = formatMoney(mini);
     els.miniAdd.disabled = mini <= 0;
   }
+  emitMini();
 }
 export function addLineFromItems({ itemName, grams=null, price=null }={}){
   if(!stateRef) return;
@@ -41,7 +48,7 @@ export function addLineFromItems({ itemName, grams=null, price=null }={}){
   renderList();
 }
 
-/* Internal render */
+/* Internal render for the bill */
 function renderList(){
   if(!els || !stateRef) return;
   let total = 0;
@@ -52,7 +59,7 @@ function renderList(){
     total += ln.lineTotal;
 
     const row = document.createElement('div');
-    // Removed row separators; keep compact vertical rhythm [align center via flex] [4][2]
+    // No separators; align amount + delete on the right via flex [14][15]
     row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;gap:8px';
 
     const left = document.createElement('div');
@@ -63,9 +70,8 @@ function renderList(){
     `;
 
     const right = document.createElement('div');
-    // Position amount then a compact ✕ next to it, centered on the cross-axis [3][9]
     right.style.cssText='display:flex;align-items:center;gap:10px';
-    right.innerHTML = `<div>${fmtMain(ln.lineTotal)}</div><button class="small-btn" data-del="${idx}" title="Remove">✕</button>`;
+    right.innerHTML = `<div>${formatMoney(ln.lineTotal)}</div><button class="small-btn" data-del="${idx}" title="Remove">✕</button>`;
 
     row.append(left, right);
     frag.appendChild(row);
@@ -73,7 +79,7 @@ function renderList(){
 
   stateRef.calc.total = total;
   els.list.appendChild(frag);
-  els.total.innerHTML = fmtMain(total);
+  els.total.innerHTML = formatMoney(total);
   dbSet(KEYS.calc, stateRef.calc).catch(()=>{});
 }
 
@@ -92,10 +98,6 @@ export function initCalculator(mountEl, state){
       <div style="margin-left:auto;font-weight:800" id="cTotal">₹0<span class="dec">.00</span></div>
     </div>
 
-    <div id="cMini" style="display:none">
-      <!-- hidden mini row; dropdowns mirror the mini total -->
-    </div>
-
     <div id="cList"></div>
   `;
   mountEl.replaceChildren(wrap);
@@ -107,7 +109,7 @@ export function initCalculator(mountEl, state){
     clearAll: wrap.querySelector('#cClearAll')
   };
 
-  // Row delete [recommended addEventListener] [7]
+  // Delete line [recommended addEventListener usage] [12]
   els.list.addEventListener('click', (e)=>{
     const del = e.target.getAttribute('data-del');
     if(del!=null){
