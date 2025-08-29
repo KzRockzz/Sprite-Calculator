@@ -1,7 +1,7 @@
 // modules/calculator.js
 import { get as dbGet, set as dbSet, KEYS } from './storage.js';
 
-/* Rounding: floor unless fractional ≥ 90 paise (FP‑safe) */
+/* FP‑safe rounding: floor unless fractional ≥ 90 paise */
 function rupeeRound(x){
   const n = Number(x) || 0;
   const r = Math.floor(n);
@@ -19,7 +19,7 @@ let stateRef = null;
 let els = null;
 let mini = 0;
 
-/* Public helpers for other modules */
+/* Public helpers for other modules (used by items.js) */
 export function setMiniFromItems(amount){
   mini = Math.max(0, rupeeRound(amount||0));
   if (els?.miniView && els?.miniAdd){
@@ -74,6 +74,68 @@ function renderList(){
   dbSet(KEYS.calc, stateRef.calc).catch(()=>{});
 }
 
+/* Long‑press keypad */
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function showMultiplierPad(anchorBtn, baseValue){
+  if(!baseValue || baseValue<=0) return;
+
+  const pad = document.createElement('div');
+  pad.setAttribute('role','dialog');
+  pad.style.cssText = `
+    position:fixed; z-index:1000;
+    background:#11151f; color:#e8eaed;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:10px; box-shadow:0 10px 24px rgba(0,0,0,.35);
+    padding:8px; width:180px;
+  `;
+  const title = document.createElement('div');
+  title.style.cssText='font-weight:700; font-size:.9rem; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center';
+  title.innerHTML = `<span>Multiply</span><button class="small-btn" data-close>✕</button>`;
+  pad.appendChild(title);
+
+  const grid = document.createElement('div');
+  grid.style.cssText='display:grid; grid-template-columns:repeat(3,1fr); gap:6px';
+  const keys = ['1','2','3','4','5','6','7','8','9','0','C','10']; // 3x4
+  keys.forEach(k=>{
+    const b=document.createElement('button');
+    b.className='small-btn';
+    b.textContent=(k==='10'?'×10':k);
+    b.setAttribute('data-k', k);
+    b.style.height='36px';
+    grid.appendChild(b);
+  });
+  pad.appendChild(grid);
+
+  // Position near the ＋ button
+  const r = anchorBtn.getBoundingClientRect();
+  const W=180, H=180;
+  let top = r.bottom + 8;
+  let left = r.left - (W - r.width);
+  top = clamp(top, 8, window.innerHeight - H - 8);
+  left = clamp(left, 8, window.innerWidth - W - 8);
+  pad.style.top = `${top}px`; pad.style.left = `${left}px`;
+
+  const bd=document.createElement('div');
+  bd.style.cssText='position:fixed;inset:0;z-index:999;background:transparent';
+
+  function close(){ pad.remove(); bd.remove(); }
+  bd.addEventListener('click', close);
+  pad.addEventListener('click', (e)=>{
+    if (e.target.getAttribute('data-close')!=null){ close(); return; }
+    const k = e.target.getAttribute('data-k'); if(!k) return;
+    if(k==='C'){ close(); return; }
+    const mul = parseInt(k,10);
+    if(!isNaN(mul) && mul>=0){
+      mini = Math.max(0, rupeeRound((parseFloat(baseValue)||0) * mul));
+      els.miniView.innerHTML = fmtMain(mini);
+      els.miniAdd.disabled = mini<=0;
+      close();
+    }
+  });
+
+  document.body.append(bd, pad);
+}
+
 /* Init */
 export function initCalculator(mountEl, state){
   if(!mountEl) return;
@@ -120,16 +182,38 @@ export function initCalculator(mountEl, state){
     els.miniAdd.disabled = mini <= 0;
   }
 
+  // Input -> mini
   els.miniPrice.addEventListener('input', ()=>{
     const raw = parseFloat(els.miniPrice.value)||0;
     mini = rupeeRound(raw);
     updateMiniView();
-  });
+  }); // input binding [2]
 
+  // Short tap: add to bill, then clear
   els.miniAdd.addEventListener('click', ()=>{
+    if(els.miniAdd.dataset.lp === '1'){ delete els.miniAdd.dataset.lp; return; } // ignore click after long press
     if(mini<=0) return;
     stateRef.calc.lines.push({ itemName:'Manual', grams:null, price:mini, lineTotal:rupeeRound(mini) });
     els.miniPrice.value=''; mini=0; updateMiniView(); renderList();
+  }); // click handler [2]
+
+  // Long‑press on ＋ to open keypad
+  let lpTimer = null;
+  const LP_MS = 450;
+  els.miniAdd.addEventListener('pointerdown', ()=>{
+    if (lpTimer) clearTimeout(lpTimer);
+    const base = parseFloat(els.miniPrice.value) || 0;
+    if (base > 0){
+      lpTimer = setTimeout(()=>{
+        els.miniAdd.dataset.lp = '1';
+        showMultiplierPad(els.miniAdd, base);
+      }, LP_MS);
+    }
+  }, {passive:true}); // pointerdown [3]
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>{
+    els.miniAdd.addEventListener(ev, ()=>{
+      if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    }, {passive:true}); // cancel timer on end/cancel [6]
   });
 
   els.miniClear.addEventListener('click', ()=>{
