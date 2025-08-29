@@ -1,4 +1,4 @@
-// app.js — Bill page + Bottom-sheet Search wired
+// app.js — Bill + History + Search sheet; FAB repositioned safely
 import { get as dbGet, set as dbSet, KEYS } from './modules/storage.js';
 import { initCalculator } from './modules/calculator.js';
 import { initItems } from './modules/items.js';
@@ -7,25 +7,19 @@ import { initSearchSheet } from './modules/search_sheet.js';
 
 const qs  = (s, r=document) => r.querySelector(s);
 
-// ---------- State
 const state = {
-  items: [],
-  recentSearches: [],
-  recentItems: [],
-  calc: { lines: [], total: 0 },
-  bills: [],
-  settings: { fontScale: 1, accent: '#59d1ff' },
-  theme: 'dark'
+  items: [], recentSearches: [], recentItems: [],
+  calc: { lines: [], total: 0 }, bills: [],
+  settings: { fontScale: 1, accent: '#59d1ff' }, theme: 'dark'
 };
 
-// ---------- Theme + tokens for bill vs sheet
+// Theme + tokens
 const themeBtn = qs('#themeBtn');
 function applyTheme(t) {
   document.body.classList.toggle('light', t==='light');
   document.body.classList.toggle('dark', t!=='light');
   const fieldBg = t==='light' ? '#ffffff' : 'rgba(255,255,255,.05)';
   const fg      = t==='light' ? '#101418' : '#e8eaed';
-  // slightly different surface for the sheet
   const surfaceBill  = t==='light' ? '#f6f7fb' : '#0b101b';
   const surfaceSheet = t==='light' ? '#ffffff' : '#0e1320';
   document.documentElement.style.setProperty('--field-bg', fieldBg);
@@ -35,19 +29,19 @@ function applyTheme(t) {
   const only = themeBtn?.querySelector('.only');
   if (only) only.textContent = t==='light' ? '☀️' : '🌙';
 }
-themeBtn?.addEventListener('click', async () => {
+themeBtn?.addEventListener('click', async ()=>{
   state.theme = (state.theme==='dark' ? 'light' : 'dark');
   applyTheme(state.theme);
   try { await dbSet(KEYS.theme, state.theme); } catch {}
 });
 
-// ---------- Settings
+// Settings
 function applySettings() {
   document.documentElement.style.setProperty('--font-scale', state.settings.fontScale);
   document.documentElement.style.setProperty('--accent', state.settings.accent);
 }
 
-// ---------- Modal open/close (generic)
+// Generic modal wiring
 document.addEventListener('click', (e)=>{
   const openId = e.target.getAttribute('data-open');
   if (openId) { qs(`#${openId}`)?.classList.add('open'); }
@@ -57,10 +51,10 @@ document.addEventListener('click', (e)=>{
     const id = e.target.getAttribute('data-close');
     if (id) qs(`#${id}`)?.classList.remove('open');
   }
-});
+}); [2]
 
-// ---------- Keyboard lift (shared var --kb)
-(function keyboardLift(){
+// Keyboard lift (sets --kb)
+(function(){
   function setKb(px){ document.documentElement.style.setProperty('--kb', Math.max(0, px) + 'px'); }
   if ('virtualKeyboard' in navigator) {
     try {
@@ -74,10 +68,22 @@ document.addEventListener('click', (e)=>{
     vv.addEventListener('resize', onVv);
     vv.addEventListener('scroll', onVv);
   }
-})();
+})(); [4]
 
-// ---------- Load then mount
-async function loadAll() {
+// Position FAB above search bar and keyboard
+function positionFab(){
+  const fab = qs('#fab');
+  if(!fab) return;
+  fab.style.position='fixed';
+  fab.style.right='16px';
+  fab.style.bottom='calc(110px + var(--kb,0px))'; // lifted more to avoid the search bar [4]
+  fab.style.zIndex='902';
+}
+window.addEventListener('resize', positionFab);
+window.addEventListener('orientationchange', positionFab);
+
+// Load then mount
+async function loadAll(){
   try {
     const [items, rSearch, rItems, calc, bills, settings, theme] = await Promise.all([
       dbGet(KEYS.items), dbGet(KEYS.recentSearches), dbGet(KEYS.recentItems),
@@ -89,27 +95,25 @@ async function loadAll() {
     if (calc && Array.isArray(calc.lines)) state.calc = calc;
     if (Array.isArray(bills)) state.bills = bills.slice(0,20);
     if (settings) Object.assign(state.settings, settings);
-    if (theme === 'light' || theme === 'dark') state.theme = theme;
-  } catch {}
+    if (theme === 'light' || 'dark') state.theme = theme || state.theme;
+  } catch {} [8]
 
   applyTheme(state.theme);
   applySettings();
 
-  // Bill page stays stable
   initCalculator(document.getElementById('calcMount'), state);
-  initItems(document.getElementById('listMount'), state);
+  initItems(document.getElementById('listMount'), state);   // no in‑page list [2]
   initHistory(state);
-
-  // Search bottom sheet (opens on tapping search box or FAB)
   initSearchSheet(state);
+  positionFab(); // after mounts
 }
 
-// ---------- Service worker
+// Service worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
   });
-}
+} [3]
 
-// ---------- Boot
+// Boot
 loadAll();
